@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react'
-import { Plus, Upload, Download } from 'lucide-react'
+import { Plus, Upload, Download, Layers } from 'lucide-react'
 import { usePromptStore } from '../../../stores/prompt'
 import type { PromptTemplate } from '../../../lib/types/prompt'
+import { GENRE_PACKS } from '../../../lib/ai/prompt-seeds-genre-packs'
 import PromptTemplateList from './PromptTemplateList'
 import PromptTemplateEditor from './PromptTemplateEditor'
 
@@ -10,11 +11,37 @@ type ScopeFilter = 'all' | 'system' | 'user'
 export default function PromptManagerPanel() {
   const templates = usePromptStore(s => s.templates)
   const saveTemplate = usePromptStore(s => s.saveTemplate)
+  const setActive = usePromptStore(s => s.setActive)
   const reload = usePromptStore(s => s.reload)
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('all')
+  const [genrePack, setGenrePack] = useState<string>('general')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  /** 切换题材包：把同 moduleKey 下属于该 genre 的模板设为激活 */
+  const handleGenrePackChange = async (genreId: string) => {
+    setGenrePack(genreId)
+    if (genreId === 'general') {
+      // 默认包：把没 genres 字段或含 'general' 的 system 模板激活
+      const candidates = templates.filter(t =>
+        t.scope === 'system' && (!t.genres || t.genres.length === 0 || t.genres.includes('general'))
+      )
+      const seenModuleKeys = new Set<string>()
+      for (const t of candidates) {
+        if (!seenModuleKeys.has(t.moduleKey)) {
+          seenModuleKeys.add(t.moduleKey)
+          if (!t.isActive) await setActive(t.id!)
+        }
+      }
+    } else {
+      // 题材包：找到该 genre 的模板批量激活
+      const packTpls = templates.filter(t => t.genres?.includes(genreId))
+      for (const t of packTpls) {
+        if (!t.isActive) await setActive(t.id!)
+      }
+    }
+  }
 
   // 过滤后的模板
   const filtered = templates.filter(t => {
@@ -87,6 +114,26 @@ export default function PromptManagerPanel() {
 
   return (
     <div className="h-full flex flex-col">
+      {/* 题材包切换器（一级显著位置） */}
+      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border flex-shrink-0 bg-bg-elevated/30">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <Layers className="w-4 h-4 text-accent flex-shrink-0" />
+          <span className="text-xs text-text-secondary flex-shrink-0">题材包</span>
+          <select
+            value={genrePack}
+            onChange={e => handleGenrePackChange(e.target.value)}
+            className="px-2 py-1 bg-bg-base border border-border rounded text-sm text-text-primary focus:outline-none focus:border-accent"
+          >
+            {GENRE_PACKS.map(p => (
+              <option key={p.id} value={p.id}>{p.emoji} {p.label}</option>
+            ))}
+          </select>
+          <span className="ml-2 text-xs text-text-muted truncate">
+            {GENRE_PACKS.find(p => p.id === genrePack)?.description}
+          </span>
+        </div>
+      </div>
+
       {/* 工具栏 */}
       <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border flex-shrink-0">
         <div className="flex items-center gap-2">

@@ -1,9 +1,10 @@
 import type { PromptTemplate } from '../types/prompt'
+import { GENRE_PACK_SEEDS } from './prompt-seeds-genre-packs'
 
 /**
- * 系统级内置提示词模板（13 条）
+ * 系统级内置提示词模板。
  *
- * 来源：从旧 src/lib/ai/prompts/*.ts 逐字迁移。
+ * 来源：从旧 src/lib/ai/prompts/*.ts 逐字迁移 + Phase 8/10 增量 + Phase 13 题材包。
  * 用户启动 App 时若 promptTemplates 表为空，自动 seed 这套模板。
  *
  * 模板语法见 src/lib/ai/prompt-engine.ts。
@@ -742,4 +743,9 @@ JSON 节点字段：
     ],
     isActive: true,
   },
+
+  // ── Phase 13：题材包 ─────────────────────────────────────────────────
+  // 4 套题材包模板（仙侠/言情/现实/悬疑）；首批默认 isActive=false，
+  // 由用户在「提示词库」顶部题材切换器选择激活。
+  ...GENRE_PACK_SEEDS,
 ]

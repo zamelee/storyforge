@@ -47,12 +47,13 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
       await db.promptTemplates.bulkAdd(rows)
     } else {
       // 已有库：补缺 seed + 更新现有 system seed 的内容（保留用户的 isActive 选择）
+      // Phase 13: 同一 moduleKey 下可能有多套 seed（不同 genre），用 name 作为唯一键
       const existingSystemMap = new Map(
-        existing.filter(t => t.scope === 'system').map(t => [t.moduleKey, t])
+        existing.filter(t => t.scope === 'system').map(t => [t.name, t])
       )
 
       for (const seed of SYSTEM_PROMPT_SEEDS) {
-        const old = existingSystemMap.get(seed.moduleKey)
+        const old = existingSystemMap.get(seed.name)
         if (!old) {
           // 缺 → 补
           await db.promptTemplates.add({ ...seed, createdAt: now, updatedAt: now })
@@ -60,6 +61,7 @@ export const usePromptStore = create<PromptStore>((set, get) => ({
           // 已有 → 用代码里的最新内容刷新（除了 isActive，保留用户的激活选择）
           const refreshed: Partial<PromptTemplate> = {
             name: seed.name,
+            moduleKey: seed.moduleKey,
             description: seed.description,
             systemPrompt: seed.systemPrompt,
             userPromptTemplate: seed.userPromptTemplate,

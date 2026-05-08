@@ -10,6 +10,7 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { buildForeshadowSuggestPrompt } from '../../lib/ai/adapters/foreshadow-adapter'
 import { buildWorldContext, buildCharacterContext } from '../../lib/ai/context-builder'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import PromptRunPanel from '../shared/PromptRunPanel'
 import ForeshadowKanban from './ForeshadowKanban'
 import type { Project, Foreshadow, ForeshadowStatus, ForeshadowType } from '../../lib/types'
 
@@ -42,6 +43,9 @@ export default function ForeshadowPanel({ project }: Props) {
   const [selected, setSelected] = useState<number | null>(null)
   const [showAI, setShowAI] = useState(false)
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list')
+  const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
+  const [systemOverride, setSystemOverride] = useState<string | null>(null)
+  const [userOverride, setUserOverride] = useState<string | null>(null)
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
 
@@ -97,7 +101,14 @@ export default function ForeshadowPanel({ project }: Props) {
     const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
     const charCtx = buildCharacterContext(characters)
     const existingForeshadows = foreshadows.map(f => `${f.name}（${TYPE_LABELS[f.type]}，${STATUS_LABELS[f.status].label}）：${f.description.slice(0, 100)}`).join('\n')
-    const messages = buildForeshadowSuggestPrompt(project.name, project.genre, worldCtx, charCtx, existingForeshadows)
+    const opts = {
+      parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
+      overrides: (systemOverride != null || userOverride != null) ? {
+        systemPrompt: systemOverride ?? undefined,
+        userPromptTemplate: userOverride ?? undefined,
+      } : undefined,
+    }
+    const messages = buildForeshadowSuggestPrompt(project.name, project.genre, worldCtx, charCtx, existingForeshadows, opts)
     ai.start(messages)
   }
 
@@ -180,10 +191,19 @@ export default function ForeshadowPanel({ project }: Props) {
       <div className="flex-1 space-y-4">
         {/* AI 建议区域 */}
         {showAI && (
-          <div className="bg-bg-surface border border-accent/20 rounded-lg p-4">
+          <div className="bg-bg-surface border border-accent/20 rounded-lg p-4 space-y-3">
             <h3 className="text-sm font-semibold text-accent mb-2 flex items-center gap-1.5">
               <Sparkles className="w-4 h-4" /> AI 伏笔建议
             </h3>
+            <PromptRunPanel
+              moduleKey="foreshadow.generate"
+              parameterValues={parameterValues}
+              onParamChange={setParameterValues}
+              systemOverride={systemOverride}
+              onSystemOverrideChange={setSystemOverride}
+              userOverride={userOverride}
+              onUserOverrideChange={setUserOverride}
+            />
             <AIStreamOutput
               output={ai.output}
               isStreaming={ai.isStreaming}
@@ -191,6 +211,7 @@ export default function ForeshadowPanel({ project }: Props) {
               onStop={ai.stop}
               onRetry={handleAISuggest}
               onAccept={(_text: string) => { setShowAI(false) }}
+              moduleKey="foreshadow.generate"
             />
           </div>
         )}

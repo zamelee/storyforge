@@ -6,6 +6,7 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { buildVolumeOutlinePrompt, buildChapterOutlinePrompt } from '../../lib/ai/adapters/outline-adapter'
 import { buildWorldContext } from '../../lib/ai/context-builder'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import PromptRunPanel from '../shared/PromptRunPanel'
 import type { Project, OutlineNode } from '../../lib/types'
 
 interface Props {
@@ -18,6 +19,10 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const { worldview, storyCore, powerSystem } = useWorldviewStore()
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set())
   const [hint, setHint] = useState('')
+  const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
+  const [systemOverride, setSystemOverride] = useState<string | null>(null)
+  const [userOverride, setUserOverride] = useState<string | null>(null)
+  const [activeModuleKey, setActiveModuleKey] = useState<'outline.volume' | 'outline.chapter'>('outline.volume')
   const ai = useAIStream()
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
@@ -45,18 +50,28 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
     })
   }
 
+  const buildOpts = () => ({
+    parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
+    overrides: (systemOverride != null || userOverride != null) ? {
+      systemPrompt: systemOverride ?? undefined,
+      userPromptTemplate: userOverride ?? undefined,
+    } : undefined,
+  })
+
   const handleAIVolumes = async () => {
+    setActiveModuleKey('outline.volume')
     const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
     const scCtx = storyCore ? `主题：${storyCore.theme}\n冲突：${storyCore.centralConflict}\n故事线：${storyCore.storyLines}` : ''
-    const messages = buildVolumeOutlinePrompt(project.name, project.genre, worldCtx, scCtx, project.targetWordCount || 500000, hint)
+    const messages = buildVolumeOutlinePrompt(project.name, project.genre, worldCtx, scCtx, project.targetWordCount || 500000, hint, buildOpts())
     ai.start(messages)
   }
 
   const handleAIChapters = async (volume: OutlineNode) => {
+    setActiveModuleKey('outline.chapter')
     const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
     const volIdx = volumes.indexOf(volume)
     const prevSummary = volIdx > 0 ? volumes[volIdx - 1].summary : ''
-    const messages = buildChapterOutlinePrompt(volume.title, volume.summary, worldCtx, prevSummary, hint)
+    const messages = buildChapterOutlinePrompt(volume.title, volume.summary, worldCtx, prevSummary, hint, buildOpts())
     ai.start(messages)
   }
 
@@ -79,10 +94,24 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       <input value={hint} onChange={e => setHint(e.target.value)} placeholder="给 AI 的补充说明（可选）"
         className="w-full mb-3 px-3 py-2 bg-bg-surface border border-border rounded-md text-text-primary text-sm focus:outline-none focus:border-accent" />
 
+      {/* 调参浮窗 (Phase 19) */}
+      <div className="mb-3">
+        <PromptRunPanel
+          moduleKey={activeModuleKey}
+          parameterValues={parameterValues}
+          onParamChange={setParameterValues}
+          systemOverride={systemOverride}
+          onSystemOverrideChange={setSystemOverride}
+          userOverride={userOverride}
+          onUserOverrideChange={setUserOverride}
+        />
+      </div>
+
       {(ai.output || ai.isStreaming || ai.error) && (
         <div className="mb-4">
           <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error}
-            onStop={ai.stop} onAccept={() => ai.reset()} onRetry={handleAIVolumes} />
+            onStop={ai.stop} onAccept={() => ai.reset()} onRetry={handleAIVolumes}
+            moduleKey={activeModuleKey} />
         </div>
       )}
 

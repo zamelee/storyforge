@@ -9,6 +9,7 @@ import { useAIStream } from '../../hooks/useAIStream'
 import { buildCharacterPrompt } from '../../lib/ai/adapters/character-adapter'
 import { buildWorldContext } from '../../lib/ai/context-builder'
 import AIStreamOutput from '../shared/AIStreamOutput'
+import PromptRunPanel from '../shared/PromptRunPanel'
 import type { Project, Character, CharacterRole } from '../../lib/types'
 
 const ROLE_LABELS: Record<CharacterRole, string> = {
@@ -41,6 +42,9 @@ export default function CharacterPanel({ project }: Props) {
   const [viewMode, setViewMode] = useState<ViewMode>(() =>
     characters.length > 10 ? 'table' : 'card'
   )
+  const [parameterValues, setParameterValues] = useState<Record<string, unknown>>({})
+  const [systemOverride, setSystemOverride] = useState<string | null>(null)
+  const [userOverride, setUserOverride] = useState<string | null>(null)
   const ai = useAIStream()
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
@@ -68,7 +72,14 @@ export default function CharacterPanel({ project }: Props) {
   const handleAIGenerate = () => {
     const existing = characters.map(c => `${c.name}（${ROLE_LABELS[c.role]}）`).join('、')
     const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
-    const messages = buildCharacterPrompt(project.name, project.genre ?? '', worldCtx, existing, hint)
+    const opts = {
+      parameterValues: Object.keys(parameterValues).length > 0 ? parameterValues : undefined,
+      overrides: (systemOverride != null || userOverride != null) ? {
+        systemPrompt: systemOverride ?? undefined,
+        userPromptTemplate: userOverride ?? undefined,
+      } : undefined,
+    }
+    const messages = buildCharacterPrompt(project.name, project.genre ?? '', worldCtx, existing, hint, opts)
     ai.start(messages)
   }
 
@@ -119,6 +130,17 @@ export default function CharacterPanel({ project }: Props) {
         </div>
       </div>
 
+      {/* 调参浮窗 (Phase 19) */}
+      <PromptRunPanel
+        moduleKey="character.generate"
+        parameterValues={parameterValues}
+        onParamChange={setParameterValues}
+        systemOverride={systemOverride}
+        onSystemOverrideChange={setSystemOverride}
+        userOverride={userOverride}
+        onUserOverrideChange={setUserOverride}
+      />
+
       {/* AI 输出 */}
       {(ai.output || ai.isStreaming || ai.error) && (
         <AIStreamOutput
@@ -128,6 +150,7 @@ export default function CharacterPanel({ project }: Props) {
           onStop={ai.stop}
           onAccept={() => ai.reset()}
           onRetry={handleAIGenerate}
+          moduleKey="character.generate"
         />
       )}
 

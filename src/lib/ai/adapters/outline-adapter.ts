@@ -2,7 +2,12 @@ import type { ChatMessage } from '../../types'
 import { usePromptStore } from '../../../stores/prompt'
 import { renderPrompt } from '../prompt-engine'
 
-/** 生成卷级大纲（API 与旧 src/lib/ai/prompts/outline.ts 一致） */
+export interface RunOptions {
+  parameterValues?: Record<string, unknown>
+  overrides?: { systemPrompt?: string; userPromptTemplate?: string }
+}
+
+/** 生成卷级大纲 */
 export function buildVolumeOutlinePrompt(
   projectName: string,
   genre: string,
@@ -10,6 +15,7 @@ export function buildVolumeOutlinePrompt(
   storyCoreContext: string,
   targetWordCount: number,
   userHint?: string,
+  options?: RunOptions,
 ): ChatMessage[] {
   const estimatedVolumes = Math.max(1, Math.ceil(targetWordCount / 300000))
   const tpl = usePromptStore.getState().getActive('outline.volume')
@@ -21,7 +27,7 @@ export function buildVolumeOutlinePrompt(
     worldContext: worldContext || '（暂无，请自由发挥）',
     storyCore: storyCoreContext || '（暂无，请自由发挥）',
     userHint,
-  })
+  }, options)
   return messages
 }
 
@@ -32,6 +38,7 @@ export function buildChapterOutlinePrompt(
   worldContext: string,
   prevVolumeSummary: string,
   userHint?: string,
+  options?: RunOptions,
 ): ChatMessage[] {
   const tpl = usePromptStore.getState().getActive('outline.chapter')
   const { messages } = renderPrompt(tpl, {
@@ -40,6 +47,6 @@ export function buildChapterOutlinePrompt(
     worldContext: worldContext || '（暂无）',
     prevVolumeSummary: prevVolumeSummary || '（这是第一卷）',
     userHint,
-  })
+  }, options)
   return messages
 }

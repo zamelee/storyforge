@@ -116,6 +116,11 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
 
       // 常见错误友好提示
       if (response.status === 401) errorMsg = 'API Key 无效或已过期'
+      if (response.status === 402) {
+        // 402 = 余额不足，但说明连接和认证都成功了
+        updateLog(log.id, { status: 'success', statusCode: response.status, duration, responseBody: bodyText.slice(0, 200) })
+        return { ok: true, message: '✅ 连接成功（账户余额不足，请充值后使用）', statusCode: response.status, duration }
+      }
       if (response.status === 403) errorMsg = 'API Key 权限不足'
       if (response.status === 404) errorMsg = 'API 地址错误，请检查 Base URL'
       if (response.status === 429) errorMsg = '请求频率超限，请稍后再试'

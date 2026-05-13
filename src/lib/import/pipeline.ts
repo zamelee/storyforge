@@ -25,6 +25,20 @@ import { extractJSON, IMPORT_MAX_TOKENS } from '../ai/adapters/import-adapter'
 import type { UnifiedParseResult } from '../types/import-session-data'
 import type { AIConfig, ChatMessage, Character, CharacterRole } from '../types'
 import type { ImportSession, ChunkState } from '../types/import-session'
+import {
+  registerChunkTexts as _registerChunkTexts,
+  hasChunkTexts as _hasChunkTexts,
+  clearChunkTexts as _clearChunkTexts,
+  getChunkText,
+} from './chunk-text-registry'
+import {
+  mergeUnified, buildRollingContext, normalizeUnified, buildFinalReport,
+} from './unified-merge'
+
+// 保留原有 API：UI / 其他模块一直从 pipeline 引入这三个函数。
+export const registerChunkTexts = _registerChunkTexts
+export const hasChunkTexts = _hasChunkTexts
+export const clearChunkTexts = _clearChunkTexts
 
 /** 跨块合并的触发周期 */
 const MERGE_EVERY_N = 10
@@ -411,67 +425,6 @@ async function applyChunkResult(
   }
 }
 
-/** 合并到 session.merged 累计结果（供 rolling context 用） */
-function mergeUnified(acc: UnifiedParseResult, fresh: UnifiedParseResult): UnifiedParseResult {
-  const out: UnifiedParseResult = {
-    worldview: { ...(acc.worldview || {}) },
-    characters: [...(acc.characters || [])],
-    outline: [...(acc.outline || [])],
-  }
-  if (fresh.worldview) {
-    for (const [k, v] of Object.entries(fresh.worldview)) {
-      if (typeof v === 'string' && v.trim()) {
-        const cur = out.worldview![k] || ''
-        out.worldview![k] = cur ? `${cur}\n\n${v.trim()}` : v.trim()
-      }
-    }
-  }
-  if (Array.isArray(fresh.characters)) {
-    for (const c of fresh.characters) {
-      if (c && typeof c.name === 'string' && c.name.trim()) {
-        out.characters!.push(c)
-      }
-    }
-  }
-  if (Array.isArray(fresh.outline)) {
-    for (const n of fresh.outline) out.outline!.push(n)
-  }
-  return out
-}
-
-/** 构造给下一块的 ~1500 字滚动上下文 */
-function buildRollingContext(merged: UnifiedParseResult): string {
-  const lines: string[] = []
-  // 已识别角色
-  if (Array.isArray(merged.characters) && merged.characters.length > 0) {
-    lines.push(`【已识别角色（${merged.characters.length} 名）】`)
-    const recent = merged.characters.slice(-40) // 只取最近 40 个，避免无限增长
-    for (const c of recent) {
-      const name = String(c.name || '')
-      const role = String(c.role || '')
-      const desc = String(c.shortDescription || '').slice(0, 30)
-      lines.push(`- ${name}（${role}）${desc ? '：' + desc : ''}`)
-    }
-  }
-  // 世界观关键词
-  if (merged.worldview) {
-    const wv = merged.worldview
-    const keys = ['worldOrigin', 'powerHierarchy', 'factionLayout', 'races'] as const
-    const keep: string[] = []
-    for (const k of keys) {
-      const v = wv[k]
-      if (typeof v === 'string' && v.trim()) keep.push(`${k}=${v.trim().slice(0, 80)}`)
-    }
-    if (keep.length > 0) {
-      lines.push('【已识别世界观要点】')
-      lines.push(keep.join(' / '))
-    }
-  }
-  let txt = lines.join('\n')
-  if (txt.length > 1500) txt = txt.slice(0, 1500) + '...（截断）'
-  return txt
-}
-
 /** 跑跨块角色合并（用 AI 找别名 / 同人） */
 async function runCharacterMerge(
   sessionId: number,
@@ -603,81 +556,8 @@ async function applyMergeGroup(
   return others.length
 }
 
-/** 标准化 AI 返回值（防御性兜底） */
-function normalizeUnified(raw: unknown): UnifiedParseResult {
-  const r = (raw as UnifiedParseResult) || {}
-  return {
-    worldview: r.worldview && typeof r.worldview === 'object' ? r.worldview : {},
-    characters: Array.isArray(r.characters) ? r.characters : [],
-    outline: Array.isArray(r.outline) ? r.outline : [],
-  }
-}
-
-function buildFinalReport(session: ImportSession): string {
-  const done = session.chunks.filter(c => c.status === 'done').length
-  const failed = session.chunks.filter(c => c.status === 'failed').length
-  const totalWv = (session.chunks
-    .map(c => c.extractedCounts?.worldviewFields || 0)
-    .reduce((a, b) => a + b, 0))
-  const totalChars = (session.chunks
-    .map(c => c.extractedCounts?.characters || 0)
-    .reduce((a, b) => a + b, 0))
-  const totalOl = (session.chunks
-    .map(c => c.extractedCounts?.outlineNodes || 0)
-    .reduce((a, b) => a + b, 0))
-  const lines = [
-    `📊 任务汇报：${session.filename}`,
-    `· 文件总字数：${session.totalChars.toLocaleString()} 字`,
-    `· 分块：${session.totalChunks} 块（每块约 ${session.chunkSize.toLocaleString()} 字）`,
-    `· 成功：${done} 块；失败：${failed} 块`,
-    `· 累计入库：世界观字段 ${totalWv}、角色 ${totalChars}（合并前）、大纲节点 ${totalOl}`,
-  ]
-  if (failed > 0) {
-    lines.push('')
-    lines.push('❗ 失败块（可单独重试）：')
-    for (const c of session.chunks) {
-      if (c.status === 'failed') {
-        lines.push(`  - 第 ${c.index + 1} 块（${c.label || '未命名'}）：${c.errorMessage || '原因未知'}`)
-      }
-    }
-  }
-  return lines.join('\n')
-}
-
 function sleep(ms: number) {
   return new Promise(r => setTimeout(r, ms))
-}
-
-// ────────────────────────────────────────────────────────────────────
-// 内存原文缓存
-//
-// session 表只存 chunk 的元数据（不存原文，避免 IndexedDB 体积爆炸）。
-// 调用方在创建 / 续跑 session 前，应把每块的原文 register 进来。
-// 页面刷新后内存丢失 → 续跑需要重新上传同一文件，UI 上会提示。
-// ────────────────────────────────────────────────────────────────────
-
-interface ChunkTextRegistry {
-  [sessionId: number]: Map<number, string>
-}
-const IN_MEM_CHUNK_TEXT: ChunkTextRegistry = {}
-
-export function registerChunkTexts(sessionId: number, chunks: Array<{ index: number; text: string }>) {
-  const m = new Map<number, string>()
-  for (const c of chunks) m.set(c.index, c.text)
-  IN_MEM_CHUNK_TEXT[sessionId] = m
-}
-
-export function hasChunkTexts(sessionId: number): boolean {
-  const m = IN_MEM_CHUNK_TEXT[sessionId]
-  return !!m && m.size > 0
-}
-
-export function clearChunkTexts(sessionId: number) {
-  delete IN_MEM_CHUNK_TEXT[sessionId]
-}
-
-function getChunkText(sessionId: number, chunkIndex: number): string | undefined {
-  return IN_MEM_CHUNK_TEXT[sessionId]?.get(chunkIndex)
 }
 
 /** 单独重试某个失败的块（用户在 ReportModal 里点的"重试失败块"） */

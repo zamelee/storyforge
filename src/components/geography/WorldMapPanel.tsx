@@ -1,10 +1,10 @@
 /**
  * WorldMapPanel — 世界地图主面板
- * 顶层容器：AI 生成按钮 + Canvas + 属性编辑器
+ * 顶层容器：AI 生成按钮 + 2D/3D 切换 + Canvas + 属性编辑器
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import { Sparkles, Loader2, RefreshCw, Map } from 'lucide-react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
+import { Sparkles, Loader2, RefreshCw, Map, Box, Layers } from 'lucide-react'
 import { useGeographyStore } from '../../stores/project-singletons'
 import { useWorldviewStore } from '../../stores/worldview'
 import { useAIStream } from '../../hooks/useAIStream'
@@ -19,11 +19,14 @@ import type { WorldMapData, MapMarker } from '../../lib/types/world-map'
 import WorldMapCanvas from './WorldMapCanvas'
 import MapMarkerEditor from './MapMarkerEditor'
 
+// 3D 组件懒加载（Three.js 很大）
+const WorldMap3DCanvas = lazy(() => import('./WorldMap3DCanvas'))
+
 interface Props {
   project: Project
 }
 
-/** 创建空的 WorldMapData */
+type ViewMode = '2d' | '3d'
 
 export default function WorldMapPanel({ project }: Props) {
   const { geography, save } = useGeographyStore()
@@ -33,6 +36,7 @@ export default function WorldMapPanel({ project }: Props) {
   const [mapData, setMapData] = useState<WorldMapData | null>(null)
   const [selectedMarker, setSelectedMarker] = useState<MapMarker | null>(null)
   const [showEditor, setShowEditor] = useState(false)
+  const [viewMode, setViewMode] = useState<ViewMode>('2d')
 
   // 从 geography.worldMapData 加载地图数据
   useEffect(() => {
@@ -62,7 +66,6 @@ export default function WorldMapPanel({ project }: Props) {
 
   // ── AI 生成地图 ─────────────────────────────────────────
   const handleGenerate = async () => {
-    // 收集世界观 + 地理信息
     const overview = geography?.overview || ''
     let locations: Location[] = []
     try {
@@ -78,13 +81,11 @@ export default function WorldMapPanel({ project }: Props) {
       const cleaned = cleanMapJSON(result)
       const parsed = JSON.parse(cleaned) as WorldMapData
 
-      // 补充缺失字段
       parsed.version = (mapData?.version || 0) + 1
       parsed.sourceHash = computeSourceHash(overview + JSON.stringify(locations))
       if (!parsed.width) parsed.width = 1200
       if (!parsed.height) parsed.height = 800
 
-      // 确保所有 marker 有 id
       for (const m of parsed.markers) {
         if (!m.id) m.id = nanoid()
         if (!m.importance) m.importance = 3
@@ -149,7 +150,6 @@ export default function WorldMapPanel({ project }: Props) {
         ),
       }
       persistMapData(updated)
-      // 同步 selectedMarker
       const found = updated.markers.find(m => m.id === markerId)
       if (found) setSelectedMarker(found)
     },
@@ -170,7 +170,6 @@ export default function WorldMapPanel({ project }: Props) {
     [mapData, persistMapData],
   )
 
-
   // ── 渲染 ─────────────────────────────────────────────────
   return (
     <div className="h-full flex flex-col">
@@ -182,9 +181,35 @@ export default function WorldMapPanel({ project }: Props) {
         </h2>
         <div className="flex items-center gap-2">
           {mapData && (
-            <span className="text-xs text-text-muted">
-              v{mapData.version} · {mapData.markers.length} 标记 · {mapData.regions.length} 区域
-            </span>
+            <>
+              <span className="text-xs text-text-muted">
+                v{mapData.version} · {mapData.markers.length} 标记 · {mapData.regions.length} 区域
+              </span>
+
+              {/* 2D/3D 切换 */}
+              <div className="flex bg-bg-elevated rounded-lg p-0.5 border border-border">
+                <button
+                  onClick={() => setViewMode('2d')}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded transition-colors ${
+                    viewMode === '2d'
+                      ? 'bg-accent text-white'
+                      : 'text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  <Layers className="w-3 h-3" /> 2D
+                </button>
+                <button
+                  onClick={() => setViewMode('3d')}
+                  className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded transition-colors ${
+                    viewMode === '3d'
+                      ? 'bg-accent text-white'
+                      : 'text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  <Box className="w-3 h-3" /> 3D
+                </button>
+              </div>
+            </>
           )}
           <button
             onClick={handleGenerate}
@@ -236,15 +261,32 @@ export default function WorldMapPanel({ project }: Props) {
       <div className="flex-1 flex min-h-0">
         {mapData ? (
           <>
-            {/* Canvas 地图 */}
+            {/* 地图渲染区 */}
             <div className="flex-1 min-w-0">
-              <WorldMapCanvas
-                data={mapData}
-                selectedMarkerId={selectedMarker?.id || null}
-                onSelectMarker={handleSelectMarker}
-                onMarkerDragEnd={handleMarkerDragEnd}
-                onDoubleClickEmpty={handleDoubleClickEmpty}
-              />
+              {viewMode === '2d' ? (
+                <WorldMapCanvas
+                  data={mapData}
+                  selectedMarkerId={selectedMarker?.id || null}
+                  onSelectMarker={handleSelectMarker}
+                  onMarkerDragEnd={handleMarkerDragEnd}
+                  onDoubleClickEmpty={handleDoubleClickEmpty}
+                />
+              ) : (
+                <Suspense fallback={
+                  <div className="w-full h-full flex items-center justify-center bg-[#1a1810] rounded-lg border border-border">
+                    <div className="text-center text-text-muted">
+                      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2 text-accent" />
+                      <p className="text-sm">加载 3D 引擎...</p>
+                    </div>
+                  </div>
+                }>
+                  <WorldMap3DCanvas
+                    data={mapData}
+                    selectedMarkerId={selectedMarker?.id || null}
+                    onSelectMarker={handleSelectMarker}
+                  />
+                </Suspense>
+              )}
             </div>
 
             {/* 属性编辑面板 */}

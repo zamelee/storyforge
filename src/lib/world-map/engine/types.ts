@@ -1,6 +1,6 @@
 /**
  * Voronoi 地图引擎 — 核心类型定义
- * 参考 Azgaar FMG 架构，用 TypedArray 实现高性能网格数据
+ * 基于 TypedArray 实现高性能网格数据
  */
 
 /** 网格单元格数据（并行数组，按 cellId 索引） */

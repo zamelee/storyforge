@@ -5,6 +5,7 @@ import { useWorldviewStore } from '../../stores/worldview'
 import { useAIStream } from '../../hooks/useAIStream'
 import { buildVolumeOutlinePrompt, buildChapterOutlinePrompt } from '../../lib/ai/adapters/outline-adapter'
 import { buildWorldContext } from '../../lib/ai/context-builder'
+import { parseVolumeOutlineOutput, parseChapterOutlineOutput } from '../../lib/ai/parse-outline-output'
 import AIStreamOutput from '../shared/AIStreamOutput'
 import PromptRunPanel from '../shared/PromptRunPanel'
 import type { Project, OutlineNode } from '../../lib/types'
@@ -23,6 +24,10 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
   const [systemOverride, setSystemOverride] = useState<string | null>(null)
   const [userOverride, setUserOverride] = useState<string | null>(null)
   const [activeModuleKey, setActiveModuleKey] = useState<'outline.volume' | 'outline.chapter'>('outline.volume')
+  // 当前正在展开章节的卷（用于章节采纳时知道写入哪个卷）
+  const [activeVolumeId, setActiveVolumeId] = useState<number | null>(null)
+  // 重试时需要知道是哪个卷
+  const [activeVolume, setActiveVolume] = useState<OutlineNode | null>(null)
   const ai = useAIStream()
 
   useEffect(() => { loadAll(project.id!) }, [project.id, loadAll])
@@ -68,11 +73,54 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
 
   const handleAIChapters = async (volume: OutlineNode) => {
     setActiveModuleKey('outline.chapter')
+    setActiveVolumeId(volume.id ?? null)
+    setActiveVolume(volume)
     const worldCtx = buildWorldContext(worldview, storyCore, powerSystem)
     const volIdx = volumes.indexOf(volume)
     const prevSummary = volIdx > 0 ? volumes[volIdx - 1].summary : ''
     const messages = buildChapterOutlinePrompt(volume.title, volume.summary, worldCtx, prevSummary, hint, buildOpts())
     ai.start(messages)
+  }
+
+  /** 采纳卷级大纲：解析 AI 输出，批量创建卷节点 */
+  const handleAcceptVolumes = async (text: string) => {
+    ai.reset()
+    const parsed = parseVolumeOutlineOutput(text)
+    if (parsed.length === 0) return
+    // 已有的卷数，新卷从后面追加
+    const existingCount = volumes.length
+    for (let i = 0; i < parsed.length; i++) {
+      await addNode({
+        projectId: project.id!,
+        parentId: null,
+        type: 'volume',
+        title: parsed[i].title,
+        summary: parsed[i].summary,
+        order: existingCount + i,
+      })
+    }
+  }
+
+  /** 采纳章节大纲：解析 AI 输出，在指定卷下批量创建章节节点 */
+  const handleAcceptChapters = async (text: string) => {
+    ai.reset()
+    if (activeVolumeId === null) return
+    const parsed = parseChapterOutlineOutput(text)
+    if (parsed.length === 0) return
+    const existingChildren = nodes.filter(n => n.parentId === activeVolumeId)
+    for (let i = 0; i < parsed.length; i++) {
+      await addNode({
+        projectId: project.id!,
+        parentId: activeVolumeId,
+        type: 'chapter',
+        title: parsed[i].title,
+        summary: parsed[i].summary,
+        order: existingChildren.length + i,
+      })
+    }
+    // 展开对应的卷
+    setExpandedIds(prev => new Set([...prev, activeVolumeId]))
+    setActiveVolumeId(null)
   }
 
   return (
@@ -110,7 +158,9 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
       {(ai.output || ai.isStreaming || ai.error) && (
         <div className="mb-4">
           <AIStreamOutput output={ai.output} isStreaming={ai.isStreaming} error={ai.error} tokenUsage={ai.tokenUsage}
-            onStop={ai.stop} onAccept={() => ai.reset()} onRetry={handleAIVolumes}
+            onStop={ai.stop}
+            onAccept={activeModuleKey === 'outline.volume' ? handleAcceptVolumes : handleAcceptChapters}
+            onRetry={activeModuleKey === 'outline.volume' ? handleAIVolumes : () => activeVolume && handleAIChapters(activeVolume)}
             moduleKey={activeModuleKey} />
         </div>
       )}

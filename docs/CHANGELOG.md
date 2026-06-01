@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-06-01
+
+### Bugfix — 三个社区反馈 bug 修复
+
+**来源**：社区用户 zzjj、AWUAWU 反馈
+
+**1) 灵感反推采纳世界观后内容不显示**
+- 原因：AI 输出的 JSON 字段（`summary/geography/society/rules`）是旧废字段，世界观三面板使用的是 v3 字段（`worldOrigin/continentLayout` 等），采纳后数据写入了无人显示的字段
+- 修复：重新设计 AI 输出结构，直接输出 7 个 v3 字段（世界来源/力量层次/地貌分布/气候环境/世界历史/种族/势力），采纳后正确写入世界观
+- 同步更新 UI 展示为 7 个对应标签
+
+**2) 世界地图 AI 生成完成后页面不更新/卡住**
+- 原因：AI 返回的地图参数 JSON 解析失败时，异常被 `catch` 吞掉只打了 `console.error`，用户看到"推理完成但地图不出来"
+- 修复：解析失败时在 UI 显示红色错误提示，告知用户重试
+
+**3) AI 生成信仰体系后无法正确拆分到三个子字段**
+- 原因：`handleAccept` 用正则表达式拆分 AI 输出文本，AI 输出格式不固定时正则失配，整段内容全部塞进「信仰层级」一个字段
+- 修复：改用**第二次 AI 调用**做结构化拆分（输出 JSON：divineRank / divineNames / divineRules），拆分期间显示 loading 提示
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/lib/ai/prompt-seeds.ts` | 灵感反推 prompt 输出结构改为 7 个 v3 世界观字段 |
+| `src/lib/ai/inspiration-reverse.ts` | `ReverseWorldview` 接口和解析逻辑对齐 v3 字段 |
+| `src/components/project/InspirationPanel.tsx` | 采纳逻辑写入正确字段 + 更新展示标签 |
+| `src/components/geography/WorldMapPanel.tsx` | 地图参数解析失败时显示错误提示 |
+| `src/components/worldview/WorldviewOriginPanel.tsx` | 信仰体系拆分改用 AI 调用代替正则 |
+
+---
+
 ## 2026-05-29
 
 ### Hotfix — 全局AI上下文互注（世界观 ↔ 各独立面板）

@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-06-03
+
+### 社区反馈批量处理 + 解析增强（全局改用 AI 解析）
+
+**来源**：社区反馈 + 全局原则确立
+
+- **伏笔 AI 生成可写入表单**（买辣椒）：AI 二次结构化解析 → 批量写入伏笔表（之前 onAccept 只关面板不落库）
+- **API 配置预设**（长耳朵兔子）：多套 API 配置一键切换（保存/应用/覆盖/改名/删除），下拉型提供商也支持手动输入任意模型名
+- **灵感反推草稿持久化 + 结果导出**（鲤鱼跃龙门）：输入自动存本地不丢，结果可导出 Markdown
+- **AI 结构化输出阅读优化**（zzjj）：JSON 输出不再直接糊给用户看，显示友好提示 + 可折叠原文
+- **世界观重叠字段导航提示**：历史线/道具/地貌等字段提示前往对应独立面板管理
+- **解析增强（全局原则）**：确立「一切文本分析/提取用 AI，不用正则」原则。章节大纲、细纲场景解析改为「JSON 优先 → AI 重构」，彻底去掉正则降级；新增 `restructure.ts` 通用 AI 重构工具
+
+**改动文件**：
+| 文件 | 改动 |
+|------|------|
+| `src/lib/ai/restructure.ts` | 新增：通用 AI 重构（非规整输出 → 干净 JSON） |
+| `src/lib/ai/parse-outline-output.ts` | parseChapterOutlineSmart / parseVolumeOutlineSmart |
+| `src/lib/ai/adapters/detail-scene-adapter.ts` | parseEnhancedDetailSmart |
+| `src/lib/ai/adapters/foreshadow-adapter.ts` | 伏笔结构化解析 |
+| `src/stores/ai-config.ts` + `AIConfigPanel.tsx` | API 预设 + 自定义模型名 |
+| `src/components/project/InspirationPanel.tsx` | 草稿持久化 + 导出 |
+| `src/components/shared/AIStreamOutput.tsx` | 结构化输出友好展示 |
+| `src/components/worldview/{Humanity,Natural}Panel.tsx` | 重叠字段导航提示 |
+| `src/components/foreshadow/ForeshadowPanel.tsx` + 大纲/细纲面板与批量 runner | 接入 AI 解析 |
+
+---
+
 ## 2026-06-02
 
 ### 📦 本期合并更新（用户版总览）

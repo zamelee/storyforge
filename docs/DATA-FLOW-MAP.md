@@ -299,6 +299,35 @@
 
 ---
 
+## 三-quinque、复核（审计自身，逐条核对记录真伪，2026-06-04）
+
+> 应要求对前述全部记录逐条回查代码，验证「已修」是否真在、「安全」是否属实、有无记错。
+
+### 🔴 复核中新发现并修复（之前漏掉）
+
+| # | 问题 | 修复 |
+|---|------|------|
+| **deleteGroup 孤儿数据** | 删世界组时级联删了 worldview/power/geo/histories/worldNodes，**漏删 `historicalTimelineEvents` / `historicalKeywords` / `codexEntries` / 该世界自定义 `codexCategories`**（均带 worldGroupId）→ 删世界后留死数据 | 补齐这四类的级联删除 |
+| **migrateToMultiWorld 漏盖章 codex** | 开多世界时把 worldview 等盖章到主世界，**漏了 `codexEntries`** → 现有词条不归主世界而残留 null=全局，会泄漏到所有世界（斗破显示遮天的矿物） | 补 `stamp(codexEntries)`（仅词条；内置/自定义「分类」保持全局 null，所有世界共用结构，不盖章） |
+
+### ✏️ 记录订正（之前记得不够准）
+
+- **「naturalResources/itemDesign 注入·codex 无双轨」**订正：codex（35-a）已上线，**若用户同时填了世界观自由文本字段与词条，会有少量重复注入**（非 bug，仅冗余 token）；35-b 迁移后消除。原"无双轨"表述不准确。
+
+### ✅ 复核确认「已修/安全」属实（抽查无误）
+
+- 三表导出/导入（importantLocations/worldRulesProfiles/codex）：query + 数据对象 + 还原 + codex worldGroupId remap **四处俱全**。
+- 三个共享格式化函数：`buildCurrentWorldContext` 与 `buildNodeWritingContext` **确实都 import 且调用**。
+- SVG 清洗 `sanitizeSvg`：确实在 `setSvgContent` 处应用。
+- 状态表 `applyDiffs` 新聚合逻辑：existing 更新 + 新建分支均正确。
+- `buildNodeWritingContext` 单世界路径：wv/sc/ps 三者均加载、用共享函数。
+- `client.ts` 流式 `JSON.parse` 确在 try/catch（「JSON.parse 均受保护」属实）。
+- **BUG-EXPORT-WG 分析复核为真**：export 的 worldGroupId 是 `...rest` 原始 id（未转 index），import `remap` 用 export-index 表查 → 键不匹配确会丢世界归属。记录准确。
+
+> 复核结论：已修项均真实在位且正确；安全项抽查属实；订正 1 处表述（codex 双轨）；**复核过程本身又揪出 2 个之前漏掉的多世界数据完整性 bug（deleteGroup 孤儿、migrate 漏盖章 codex）并已修**。
+
+---
+
 ## 四、统一架构方案（蓝图）
 
 把上面 A/B 两条散缝各收成一根，C/D 由词条化重构收口。

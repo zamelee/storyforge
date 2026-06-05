@@ -112,6 +112,24 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
       for (const wn of allWn) {
         if (wn.worldGroupId === id) await db.worldNodes.delete(wn.id!)
       }
+      // 历史年表事件 / 关键词（有 worldGroupId，此前漏删 → 孤儿数据）
+      const allHte = await db.historicalTimelineEvents.where('projectId').equals(pid).toArray()
+      for (const e of allHte) {
+        if (e.worldGroupId === id) await db.historicalTimelineEvents.delete(e.id!)
+      }
+      const allHk = await db.historicalKeywords.where('projectId').equals(pid).toArray()
+      for (const k of allHk) {
+        if (k.worldGroupId === id) await db.historicalKeywords.delete(k.id!)
+      }
+      // 设定词条：删该世界的词条 + 该世界的自定义分类（内置分类 worldGroupId=null 为全局，不会匹配）
+      const allCe = await db.codexEntries.where('projectId').equals(pid).toArray()
+      for (const e of allCe) {
+        if (e.worldGroupId === id) await db.codexEntries.delete(e.id!)
+      }
+      const allCc = await db.codexCategories.where('projectId').equals(pid).toArray()
+      for (const c of allCc) {
+        if (c.worldGroupId === id) await db.codexCategories.delete(c.id!)
+      }
 
       // 角色：清除归属（不删角色本身）
       const allChars = await db.characters.where('projectId').equals(pid).toArray()
@@ -225,6 +243,9 @@ export const useWorldGroupStore = create<WorldGroupStore>((set, get) => ({
       await stamp(db.worldNodes, await db.worldNodes.where('projectId').equals(projectId).toArray())
       await stamp(db.historicalTimelineEvents, await db.historicalTimelineEvents.where('projectId').equals(projectId).toArray())
       await stamp(db.historicalKeywords, await db.historicalKeywords.where('projectId').equals(projectId).toArray())
+      // 设定词条：只盖章「词条」到主世界（使其归属主世界，与 worldview 一致）；
+      // 内置/自定义「分类」保持 worldGroupId=null 为全局结构，所有世界共用，不盖章。
+      await stamp(db.codexEntries, await db.codexEntries.where('projectId').equals(projectId).toArray())
     })
   },
 

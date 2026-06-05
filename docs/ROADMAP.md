@@ -541,6 +541,12 @@
 
 ## 🔵 优先级：低（远期）
 
+### 架构·项目表唯一注册表（防"新表漏接生命周期"）
+
+> 来源：删除引用完整性审计发现的反复根因 | 中优先
+
+`importantLocations / worldRulesProfiles / codexCategories / codexEntries / aiUsageLog` 等较新表反复漏接入生命周期操作（导出 / deleteProject / deleteGroup / migrateToMultiWorld 各自手列表）。建一份 `PROJECT_TABLES` 唯一注册表（每表标注 projectId / worldGroupId / 外键 / 是否树形），让 export·导入·deleteProject·deleteGroup·migrate 全从它派生 → 加新表只改一处，结构性杜绝漏接。与「统一上下文装配层 R-1」是同一类"单一事实源"思路。
+
 ### 审计遗留低优先项（2026-06-04 全量审计）
 
 - **上下文预算真裁剪**（功能逻辑审计发现）：`autoTrimToFit` 已实现但仅用于 UI 显示「会裁哪些层」，**实际发送的上下文从不真裁** → 超出模型窗口时直接 API 报错而非逐层降级。多数场景被三层记忆字符预算兜住，但 L3（参考分析/大师洞察引用）可叠加超限。根治需把上下文组装改为 token-aware（按 segment 真删 L3→L2→L1）再发送。中优先。

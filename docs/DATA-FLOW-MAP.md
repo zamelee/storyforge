@@ -328,6 +328,30 @@
 
 ---
 
+## 三-sex、删除引用完整性审计（之前完全未扫的一类，2026-06-04）
+
+> 扫「删除某条数据时，引用它的数据会不会变成悬空孤儿」。这一整类之前没专门查过，结果扫出 4 个真 bug。
+
+### 🔴 已修复
+
+| 删除操作 | 孤儿问题 | 修复 |
+|---------|---------|------|
+| **deleteNode（大纲节点）** | 级联删了子节点，但**漏删挂在节点上的 `chapters`（正文内容！）+ `detailedOutlines`** → 删大纲后正文成不可达孤儿 | 按 outlineNodeId 级联删除 chapters + detailedOutlines |
+| **deleteCharacter** | **漏删引用该角色的 `characterRelations`** → 关系网显示「角色#id」断链 | 按 from/toCharacterId 清理关系 |
+| **deleteChapter** | 漏删紧耦合的 `emotionBeatCards` | 补清理（物品/年表/伏笔的 chapterId 软引用保留——属独立产物，语义不明确不强删） |
+| **deleteProject（重大）** | 级联约 30 表，却**漏了 `importantLocations` / `worldRulesProfiles` / `codexCategories` / `codexEntries` / `aiUsageLog`** → 删项目后这些用户内容永久孤儿 | 补齐这 5 张表的级联删除 |
+
+### ✅ 核对无误
+
+- deleteReference 级联 referenceChunkAnalysis、codex deleteCategory 级联 entries、deleteGroup 级联世界数据（上一批已补全）：均正确。
+
+### ⚠️ 反复出现的根因（架构建议）
+
+`importantLocations / worldRulesProfiles / codex` 这几张较新的表，已被发现**反复漏接入生命周期操作**：导出（已修）、deleteProject（本批已修）、deleteGroup（上批已修）、migrateToMultiWorld（上批已修）。根因同「上下文装配漂移」：**没有一份「项目全部表」的唯一清单**，每个生命周期操作各自手列表 → 加新表必漏某处。
+**建议**：建一份 `PROJECT_TABLES` 注册表（含每表的 projectId/worldGroupId/外键信息），export / deleteProject / deleteGroup / migrate 全部从它派生 → 加新表只改一处，杜绝此类漏接。已记入 ROADMAP。
+
+---
+
 ## 四、统一架构方案（蓝图）
 
 把上面 A/B 两条散缝各收成一根，C/D 由词条化重构收口。

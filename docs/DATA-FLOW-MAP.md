@@ -291,6 +291,11 @@
 - 工作流 `inputMapping`：全部 seed 仅用 `previousOutput`，WorkflowRunner 实现覆盖到位。
 - 伏笔 `updateStatus` 仅改状态、不自动联动埋设/回收章节（埋设章节为用户显式设置，设计如此）。
 - 导入续跑：scanIncomplete + loadBlob + 续跑结构完整。
+- 故事块层级（卷→故事块→章）：parentId + order（取 siblings.length）正确。
+- 参考分析分块/合并、master-studies 流水线（workId 维度）、AI 配置预设（localStorage 增删改）、写作风格注入（代码定义预设按 id 查）：逻辑健全，无字段错位。
+- ⚠️ `filterActiveCharacters` 用章节 **ID** 比较当作故事顺序（`exitChapterId < currentChapterId`），章节重排后理论上会错；但 `firstAppearChapterId/exitChapterId` **全项目无 UI 写入**（恒空）→ filter 实际等于返回全部，**当前休眠无影响**。如未来加这两字段的 UI，需改为按 `order` 比较。
+
+> **功能逻辑审计结论**：核心写作链路（三层记忆 / 状态提取 / 物品·年表 / 伏笔 / 工作流 / 大纲块 / 参考分析 / 配置预设 / 风格注入）逐个读过；除状态表 `applyDiffs` 一个真 bug（已修）外，其余逻辑健全，另记 2 个调优/降级项（autoTrimToFit 真裁剪、记忆 semantic 预算）与 1 个休眠边界（filterActiveCharacters）。
 
 ---
 

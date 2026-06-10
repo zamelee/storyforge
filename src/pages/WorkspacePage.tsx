@@ -36,7 +36,6 @@ import CharacterPanel from '../components/character/CharacterPanel'
 import CharacterMinorPanel from '../components/character/CharacterMinorPanel'
 import CharacterNPCPanel from '../components/character/CharacterNPCPanel'
 import CharacterExtraPanel from '../components/character/CharacterExtraPanel'
-import FactionPanel from '../components/faction/FactionPanel'
 import OutlinePanel from '../components/outline/OutlinePanel'
 import DetailedOutlinePanel from '../components/outline/DetailedOutlinePanel'
 import ChaptersListPanel from '../components/editor/ChaptersListPanel'
@@ -46,6 +45,7 @@ const GeographyPanel = lazy(() => import('../components/geography/GeographyPanel
 import HistoryPanel from '../components/history/HistoryPanel'
 import CodexPanel from '../components/codex/CodexPanel'
 import { migrateItemSystemToCodex } from '../lib/migrations/item-system-to-codex'
+import { migrateFactionToCodex } from '../lib/migrations/faction-to-codex'
 import CreativeRulesPanel from '../components/rules/CreativeRulesPanel'
 import CharacterRelationPanel from '../components/relations/CharacterRelationPanel'
 const WorldMapPanel = lazy(() => import('../components/geography/WorldMapPanel'))
@@ -115,6 +115,8 @@ export default function WorkspacePage() {
         // C1: 道具系统已下线 —— 旧 itemSystems 数据一次性迁移到「人工器物」词条(先迁移后删,幂等)
         // 防御:迁移失败不得阻塞整个工作区加载(catch 兜底,旧数据保留待下次重试)
         migrateItemSystemToCodex(pid).catch(e => console.error('[C1] 道具迁移失败(不阻塞加载,旧数据保留):', e)),
+        // C2: 势力面板已下线 —— 旧 factions 表数据一次性迁移到「势力」词条(先迁移后删,幂等)
+        migrateFactionToCodex(pid).catch(e => console.error('[C2] 势力迁移失败(不阻塞加载,旧数据保留):', e)),
         useCreativeRulesStore.getState().loadAll(pid),
         useCharacterRelationStore.getState().loadAll(pid),
         useReferenceStore.getState().loadAll(pid),
@@ -194,8 +196,6 @@ export default function WorkspacePage() {
         return <CharacterExtraPanel project={project} />
       case 'relations':
         return <CharacterRelationPanel project={project} />
-      case 'factions':
-        return <FactionPanel project={project} />
 
       // ── 创作区 ─────────────────────────────────────────────────────
       case 'rules':

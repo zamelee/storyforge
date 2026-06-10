@@ -77,7 +77,7 @@ export type SidebarModule =
   | 'world-map'
   // legacy aliases，路由仍兼容但不再出现在 sidebar
   | 'power-system'
-  | 'story-core' | 'factions' | 'backup'
+  | 'story-core' | 'backup'
 
 // ── 树节点 ────────────────────────────────────────────────────────────
 

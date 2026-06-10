@@ -169,11 +169,6 @@ function GenericProps({ module }: { module: SidebarModule }) {
       title: '故事核心',
       tips: ['故事核心定义主线冲突与主题', '清晰的主角动机有助于AI保持人物一致性'],
     },
-    factions: {
-      icon: Users,
-      title: '势力',
-      tips: ['势力关系图谱影响政治剧情生成', '建议标注各势力的核心矛盾'],
-    },
     'power-system': {
       icon: Info,
       title: '力量体系',

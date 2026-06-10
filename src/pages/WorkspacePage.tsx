@@ -44,8 +44,6 @@ import ForeshadowPanel from '../components/foreshadow/ForeshadowPanel'
 const GeographyPanel = lazy(() => import('../components/geography/GeographyPanel'))
 import HistoryPanel from '../components/history/HistoryPanel'
 import CodexPanel from '../components/codex/CodexPanel'
-import { migrateItemSystemToCodex } from '../lib/migrations/item-system-to-codex'
-import { migrateFactionToCodex } from '../lib/migrations/faction-to-codex'
 import CreativeRulesPanel from '../components/rules/CreativeRulesPanel'
 import CharacterRelationPanel from '../components/relations/CharacterRelationPanel'
 const WorldMapPanel = lazy(() => import('../components/geography/WorldMapPanel'))
@@ -112,11 +110,7 @@ export default function WorkspacePage() {
         useForeshadowStore.getState().loadAll(pid),
         useGeographyStore.getState().loadAll(pid),
         useHistoryStore.getState().loadAll(pid),
-        // C1: 道具系统已下线 —— 旧 itemSystems 数据一次性迁移到「人工器物」词条(先迁移后删,幂等)
-        // 防御:迁移失败不得阻塞整个工作区加载(catch 兜底,旧数据保留待下次重试)
-        migrateItemSystemToCodex(pid).catch(e => console.error('[C1] 道具迁移失败(不阻塞加载,旧数据保留):', e)),
-        // C2: 势力面板已下线 —— 旧 factions 表数据一次性迁移到「势力」词条(先迁移后删,幂等)
-        migrateFactionToCodex(pid).catch(e => console.error('[C2] 势力迁移失败(不阻塞加载,旧数据保留):', e)),
+        // 注:道具系统(C1)/ 势力(C2)的旧表数据已由 DB v29 升级迁移并入词条,旧表已删除,此处无需再迁移。
         useCreativeRulesStore.getState().loadAll(pid),
         useCharacterRelationStore.getState().loadAll(pid),
         useReferenceStore.getState().loadAll(pid),

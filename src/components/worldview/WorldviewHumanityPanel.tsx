@@ -17,6 +17,7 @@ async function buildRulesSourceContext(projectId: number, worldGroupId: number |
   return (await assembleContext({ projectId, worldGroupId, sourceKeys: ['worldRules'] })).text
 }
 import CurrencyPanel from './CurrencyPanel'
+import CodexPanel from '../codex/CodexPanel'
 
 // ── 字段定义（统一标签，兼容幻想与历史） ─────────────────────────
 
@@ -147,6 +148,14 @@ export default function WorldviewHumanityPanel({ project }: Props) {
         <div className="flex-1 min-w-0 overflow-y-auto p-6">
           {FIELDS.map(f => (
             <div key={f.key} className={activeKey === f.key ? '' : 'hidden'}>
+              {/* B4: 人文主体词条(种族/势力/城池/器物)——结构化登记,可自定义字段、互相关联、进 AI 上下文 */}
+              {f.key === 'races' && (
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-text-primary mb-1">📚 人文主体(词条):种族 / 势力 / 城池重镇 / 人工器物</h3>
+                  <p className="text-xs text-text-muted mb-3">结构化登记人文设定——可自定义专属字段、互相关联，并进入 AI 生成上下文。下方旧版「种族与民族」纯文本兼容保留。</p>
+                  <CodexPanel project={project} fixedDomain="humanity" embedded />
+                </div>
+              )}
               <HumanityFieldEditor
                 meta={f}
                 value={values[f.key] || ''}

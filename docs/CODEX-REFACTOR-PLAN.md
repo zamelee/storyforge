@@ -31,8 +31,10 @@
 | 数据模型 `CodexCategory/CodexEntry/CodexFieldDef`(两表+schema+refs+builtInKey+hidden+worldGroupId) | ✅ **已建好,符合设计 §3**(35-a) |
 | 独立 `CodexPanel.tsx`(设定词条侧栏) | ✅ 存在(但是独立模块=跑偏点) |
 | `codex` 上下文源(`CONTEXT_SOURCES`) | ✅ 已注册 |
-| 嵌入自然/人文面板 | ❌ 未做 |
-| 自然资源词条化(矿物/草药/异兽) | ❌ 仍旧纯文本 |
+| 嵌入自然面板（B3） | ✅ 已嵌入「自然环境·自然物产」子页（矿物/草药/异兽词条 + 旧文本折叠保留） |
+| 嵌入人文面板（B4） | ✅ 已嵌入「人文环境·种族与民族」子页（覆盖种族/势力/城池/器物） |
+| 内置分类自愈去重 | ✅ ensureBuiltIns 改为自愈式幂等（B3 验证时附带修复每类两条的历史重复） |
+| 自然资源词条化(矿物/草药/异兽) | ✅ 词条已嵌入,旧纯文本折叠兼容保留(待 C 阶段收口) |
 | 道具系统下线 | ❌ `ItemSystemPanel` + 侧栏 `items` 仍在 |
 | 内置分类 seed + 默认 fieldSchema | ⚠️ **待核实**(B0 第一步确认) |
 | 自定义字段管理 UI / ref 关联 UI | ⚠️ **待核实** CodexPanel 是否已有 |

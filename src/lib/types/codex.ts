@@ -44,6 +44,8 @@ export type BuiltInCodexKey =
   | 'faction'   // 势力
   | 'city'      // 城池重镇
   | 'artifact'  // 人工器物
+  | 'naturalSite' // 自然地点（地形地貌）
+  | 'humanSite'   // 人文地点（城邑场所）
 
 /** 词条分类（树状，内置 + 用户自定义） */
 export interface CodexCategory {
@@ -82,6 +84,11 @@ export interface CodexEntry {
   fields: string
   /** 与其它词条的关联（JSON：{ [fieldKey]: entryId[] }） */
   refs?: string
+  /**
+   * 重要度星级（1-5）。主要用于「地点」类词条标记重要程度，
+   * 也可用于任意词条。未设/0 表示未标记。非索引字段，零 DB 迁移。
+   */
+  importance?: number
   order: number
   worldGroupId?: number | null
   createdAt: number
@@ -240,6 +247,30 @@ export const BUILTIN_CATEGORIES: BuiltInCategorySeed[] = [
       { key: 'materials', label: '所需材料', type: 'ref', refCategory: 'mineral', refMulti: true },
       { key: 'origin', label: '来历', type: 'longtext' },
       { key: 'owner', label: '当前持有者', type: 'text' },
+    ],
+  },
+  // 地点(自然/人文)——「重要地点」并入词条:地点活在世界观面板里,自动进 AI 上下文。
+  // 重要程度走条目的 importance 星级字段(不在 fieldSchema 里)。
+  {
+    domain: 'natural', builtInKey: 'naturalSite', name: '自然地点', icon: '🏔️',
+    fields: [
+      { key: 'type', label: '地形类型', type: 'select', options: ['大陆', '山脉', '山峰', '高原', '峡谷', '森林', '雨林', '沙漠', '草原', '河流', '湖泊', '海洋', '洞穴', '冰原', '火山', '秘境', '其他'] },
+      { key: 'parent', label: '上级归属', type: 'text', placeholder: '如「黑石山脉」(所属的更大自然区域)' },
+      { key: 'climate', label: '气候', type: 'text' },
+      { key: 'terrain', label: '地势险要', type: 'longtext' },
+      { key: 'resources', label: '物产资源', type: 'ref', refCategory: 'mineral', refMulti: true },
+      { key: 'feature', label: '环境特征', type: 'longtext' },
+    ],
+  },
+  {
+    domain: 'humanity', builtInKey: 'humanSite', name: '人文地点', icon: '🏙️',
+    fields: [
+      { key: 'type', label: '场所类型', type: 'select', options: ['都城', '城市', '城镇', '村庄', '要塞', '关隘', '港口', '驿站', '宗门', '学院', '集市', '战场', '神殿', '遗迹', '禁地', '其他'] },
+      { key: 'parent', label: '上级归属', type: 'text', placeholder: '如「大梁国·北凉省」(所属的行政/势力区域)' },
+      { key: 'faction', label: '管辖势力', type: 'ref', refCategory: 'faction', refMulti: false },
+      { key: 'scale', label: '规模人口', type: 'text' },
+      { key: 'economy', label: '经济特产', type: 'longtext' },
+      { key: 'strategic', label: '战略地位', type: 'longtext' },
     ],
   },
 ]

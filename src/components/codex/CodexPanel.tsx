@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Plus, Trash2, EyeOff, Eye, FolderPlus, Boxes, ChevronRight, Settings2, X, ChevronUp, ChevronDown,
+  Plus, Trash2, EyeOff, Eye, FolderPlus, Boxes, ChevronRight, Settings2, X, ChevronUp, ChevronDown, Star,
 } from 'lucide-react'
 import { CInput, CTextarea } from '../shared/CompositionInput'
 import { useCodexStore } from '../../stores/codex'
@@ -401,6 +401,29 @@ function EntryDetail({
           placeholder="名称"
           className="flex-1 px-3 py-2 rounded-lg bg-bg-elevated border border-border text-sm font-medium"
         />
+      </div>
+      {/* 重要度星级（1-5）—— 主要用于地点类词条;点亮的星越多越重要,再点当前星可清空 */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-text-muted w-12">重要度</span>
+        <div className="flex items-center gap-0.5">
+          {[1, 2, 3, 4, 5].map(n => {
+            const active = (entry.importance ?? 0) >= n
+            return (
+              <button
+                key={n}
+                type="button"
+                title={`${n} 星`}
+                onClick={() => onChange({ importance: entry.importance === n ? 0 : n })}
+                className="p-0.5 hover:scale-110 transition-transform"
+              >
+                <Star className={`w-4 h-4 ${active ? 'fill-amber-400 text-amber-400' : 'text-text-muted'}`} />
+              </button>
+            )
+          })}
+        </div>
+        {(entry.importance ?? 0) > 0 && (
+          <span className="text-[11px] text-amber-400/80">{entry.importance} 星</span>
+        )}
       </div>
       <CInput
         value={entry.summary}

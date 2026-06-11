@@ -312,7 +312,7 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
 **【铁律·必须严格遵守】**
 1. 只展开【本卷】：所有章节必须严格围绕上面的「卷情节摘要」推进，本卷结束时的剧情进度应恰好停在该摘要描述的终点。绝不能把后续卷的情节提前写出来，更不能在这一卷里就把整本书的故事讲完。
 2. 每一章都要落在「卷情节摘要」的范围之内、与摘要内容相符；把本卷情节均匀拆分到各章，每章只推进一小步，保持合理节奏，不要几章就把本卷讲完。{{#if usesChaptersPerVolume}}
-3. 章节数量：必须输出恰好 {{chaptersPerVolume}} 章，不多不少。{{/if}}{{#if notUsesChaptersPerVolume}}
+3. 章节数量：必须输出恰好 {{chaptersPerVolume}} 章，不多不少。若卷情节摘要中提到的章节数与此处不一致，一律以此处设定的 {{chaptersPerVolume}} 章为准。{{/if}}{{#if notUsesChaptersPerVolume}}
 3. 章节数量：约 15-25 章。{{/if}}
 
 **输出格式**：请严格输出 JSON 数组，用 \`\`\`json 代码块包裹{{#if usesChaptersPerVolume}}（数组长度必须恰好为 {{chaptersPerVolume}}）{{/if}}，每个元素包含 title（章节标题，如"第1章：XXX"）和 summary（1-2 句情节摘要）。示例：

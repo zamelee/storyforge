@@ -45,6 +45,9 @@ describe('R-FB12: 章节大纲展开锁定本卷 + 遵守章节数', () => {
     expect(full).toContain('恰好 30 章')
     expect(full).toContain('数组长度必须恰好为 30')
     expect(full).not.toContain('恰好 20 章')
+
+    // 卷摘要与滑块冲突时,显式裁决以滑块设定为准(社区追问:摘要写100、滑块80按哪个)
+    expect(full).toContain('以此处设定的 30 章为准')
   })
 
   it('启用了其它参数但未设章节数时，不会渲染出空的 {{chaptersPerVolume}}', () => {

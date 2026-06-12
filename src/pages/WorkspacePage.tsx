@@ -14,6 +14,7 @@ import { useReferenceStore } from '../stores/reference'
 import { useEmotionBeatStore } from '../stores/emotion-beat'
 import { useWorldRulesStore } from '../stores/world-rules'
 import { useAutoBackup } from '../hooks/useAutoBackup'
+import { useGistAutoBackup } from '../hooks/useGistAutoBackup'
 import { PanelRight } from 'lucide-react'
 import Sidebar, { type SidebarModule } from '../components/layout/Sidebar'
 import PropertiesPanel from '../components/layout/PropertiesPanel'
@@ -83,8 +84,10 @@ export default function WorkspacePage() {
     return hidden
   }, [project?.enableMultiWorld])
 
-  // 自动定时备份（每 5 分钟）
+  // 自动定时备份（每 5 分钟本地快照）
   useAutoBackup(project?.id ?? null)
+  // 云自动备份（开关开启时每 10 分钟推 GitHub Gist）
+  useGistAutoBackup(project?.id ?? null)
 
   // 加载项目 + 所有关联数据
   useEffect(() => {

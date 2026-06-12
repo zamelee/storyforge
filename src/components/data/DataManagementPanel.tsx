@@ -9,6 +9,7 @@ import { exportProjectJSON, downloadJSON, importProjectJSON, type ProjectExportD
 import { exportProjectMarkdown, exportProjectTXT, downloadTextFile } from '../../lib/export/text-export'
 import { useFileSystemAccess, isFSASupported, type FSAHandle } from '../../hooks/useFileSystemAccess'
 import { useBackupStore } from '../../stores/backup'
+import CloudBackupCard from './CloudBackupCard'
 import { useToast } from '../shared/Toast'
 import type { Project, Snapshot } from '../../lib/types'
 
@@ -155,6 +156,9 @@ function ExportTab({ project, onImported }: Props) {
           <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileSelected} className="hidden" />
         </div>
       </SectionCard>
+
+      {/* 云备份（GitHub Gist）—— 清浏览器/换设备都不丢 */}
+      <CloudBackupCard projectId={project.id!} onImported={onImported} />
 
       {/* Markdown */}
       <SectionCard

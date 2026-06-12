@@ -22,28 +22,36 @@ export function buildVoronoiMapPrompt(
   worldview: Partial<Worldview> | null,
   overview: string,
   locations: Location[],
+  /** 自然/人文词条上下文（用户逐条登记的具体山川/势力/城池等），由 buildCodexContext 提供 */
+  codexContext = '',
 ): ChatMessage[] {
-  // 拼接世界观上下文
+  // 拼接世界观上下文 —— 读全用户已填的一切相关内容,一项不漏
   const contextParts: string[] = []
 
   if (worldview?.worldStructure)
     contextParts.push(`【世界结构】${worldview.worldStructure}`)
   if (worldview?.worldDimensions)
-    contextParts.push(`【世界尺寸】${worldview.worldDimensions}`)
+    contextParts.push(`【世界尺寸/疆域】${worldview.worldDimensions}`)
   if (worldview?.continentLayout)
-    contextParts.push(`【大陆分布】${worldview.continentLayout}`)
+    contextParts.push(`【地貌/大陆分布】${worldview.continentLayout}`)
   if (worldview?.mountainsRivers)
-    contextParts.push(`【山川河流】${worldview.mountainsRivers}`)
+    contextParts.push(`【山川水系】${worldview.mountainsRivers}`)
   if (worldview?.climateByRegion)
-    contextParts.push(`【气候分区】${worldview.climateByRegion}`)
+    contextParts.push(`【气候环境】${worldview.climateByRegion}`)
+  if (worldview?.naturalResourceOverview)
+    contextParts.push(`【自然资源】${worldview.naturalResourceOverview}`)
   if (worldview?.factionLayout)
     contextParts.push(`【势力分布】${worldview.factionLayout}`)
+  if (worldview?.regionDimensions)
+    contextParts.push(`【城池重镇】${worldview.regionDimensions}`)
   if (worldview?.races)
     contextParts.push(`【种族设定】${worldview.races}`)
   if (worldview?.politicsEconomyCulture)
     contextParts.push(`【政治经济文化】${worldview.politicsEconomyCulture}`)
   if (overview)
     contextParts.push(`【地理总述】${overview}`)
+  if (codexContext && codexContext.trim())
+    contextParts.push(`【已登记词条（具体山川/势力/城池等，名字务必采用）】\n${codexContext.trim()}`)
 
   const locationList = locations.length > 0
     ? locations
@@ -103,17 +111,17 @@ export function buildVoronoiMapPrompt(
   "riverNames": ["河流1", "河流2", ...]
 }
 
-**设计指导**：
+**【铁律 · 必须尊重用户已设定的内容】**：
+- 用户在上文写明的**势力 / 国家名**，必须原样放进 stateNames；写明的**城池 / 重镇 / 重要地点名**（含「城池重镇」「已登记词条」「已设定地点」里的），必须原样放进 burgNames；写明的**山川 / 河流名**（含「山川水系」「词条」里的），必须原样放进 riverNames。**一个都不许漏、不许改名。**
+- **数量以用户为准**：用户写了几个势力，stateCount 就按几个（再适当±）；用户列了多少城池，burgNames 至少要含全这些。
+- 用户没给、但地图需要的元素（还缺多少城镇名、地形走向、温湿度档、大陆数等），你**在不与用户已给内容冲突的前提下合理补全**——这是补全，不是覆盖。
+
+**参数设计指导**：
 - 根据世界观风格选择 heightmapTemplate：比如"诸岛"用 archipelago，"一块大陆"用 pangea，"高原"用 highland
 - 根据世界观文化氛围选择 namingStyle：中式修仙/武侠 → chinese；和风 → japanese；西方奇幻 → european 或 highFantasy
-- 如果世界观提到"北方寒冷"，设 temperatureShift 为负值
-- 如果世界观提到"干旱沙漠"，设 precipitationFactor < 0.6
-- 如果提到"群岛"，设 landRatio=0.25-0.35 + heightmapTemplate="archipelago"
-- 国家名和城市名必须完全匹配所选的 namingStyle 风格
-- 如果用户已设定地点名/势力名，优先使用它们，补充的名字风格一致
-- burgNames 的前 stateCount 个会作为首都名，之后的作为普通城镇名
-- burgNames 长度至少为 stateCount 的 2-3 倍
-- **注意**：stateNames/burgNames/riverNames 中的每个名字都必须符合 namingStyle 风格`
+- 如果世界观提到"北方寒冷"，设 temperatureShift 为负值；"干旱沙漠"，设 precipitationFactor < 0.6；"群岛"，设 landRatio=0.25-0.35 + heightmapTemplate="archipelago"
+- burgNames 的前 stateCount 个会作为首都名，之后的作为普通城镇名；burgNames 长度至少为 stateCount 的 2-3 倍
+- 补全的名字（用户没给的）必须符合所选 namingStyle 风格`
 
   const userPrompt = `请根据以下世界观描述，设计地图生成参数 JSON：
 

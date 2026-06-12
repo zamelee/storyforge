@@ -18,6 +18,7 @@ import {
   buildVoronoiMapPrompt,
   parseVoronoiMapConfig,
 } from '../../lib/ai/adapters/voronoi-map-adapter'
+import { buildCodexContext } from '../../lib/ai/codex-context'
 import type { Project, Location, Worldview, Geography } from '../../lib/types'
 import type { MapGenConfig } from '../../lib/world-map/engine'
 import WorldTreeSidebar from './WorldTreeSidebar'
@@ -93,7 +94,9 @@ export default function WorldMapPanel({ project }: Props) {
     } catch { /* empty */ }
 
     setParseError(null)
-    const messages = buildVoronoiMapPrompt(wv, overview, locations)
+    // 读全:把当前世界作用域下的自然/人文词条(具体山川/势力/城池)也喂给地图生成
+    const codexCtx = await buildCodexContext(project.id!, scopedGroupId, { maxChars: 2000 })
+    const messages = buildVoronoiMapPrompt(wv, overview, locations, codexCtx)
     const result = await ai.start(messages)
     if (!result) return
 

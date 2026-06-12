@@ -565,7 +565,11 @@
 
 ---
 
-### BUG-EXPORT-WG — 多世界导出/导入 worldGroupId 重映射键值错位（数据完整性）
+### ✅ BUG-EXPORT-WG — 多世界导出/导入 worldGroupId 重映射键值错位（已修复·已测试）
+
+> **状态更正（2026-06-12 复查）**：此条**早已修复**（方案 A 已实施），本条标记此前未更新。
+> 现状：导出侧所有 worldScoped 表用 `withWorldGroupExportId` 把 `worldGroupId` 转成 `_worldGroupExportId`（导出序号），角色用 `_homeWorldGroupExportId`；导入侧 `importWorldScoped`/`importHomeWorldScoped` 经 `remapImportedWorldGroupId`（序号→新 id）逐表 remap。回归测试 `R-03-export-world-group-remap` 建多世界项目、全 worldScoped 表挂副世界、导出→导入断言全部正确归属，**通过**。世界地图/世界树（worldNodes）同样覆盖。无需再改。
+> 以下为原始记录（历史留存）：
 
 > 来源：全量审计（2026-06-04）修数据丢失时顺带发现 | 影响：仅多世界项目的「导出备份 → 导入恢复」；单世界无影响 | 文件：`src/lib/export/json-export.ts`
 

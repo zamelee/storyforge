@@ -74,7 +74,7 @@ export function generateRivers(
 
   for (const source of sources) {
     // 向上游追溯找真正的源头
-    let trueSource = source
+    const trueSource = source
     // 只从还没被分配的、有足够流量的开始
     if (assigned[trueSource]) continue
 

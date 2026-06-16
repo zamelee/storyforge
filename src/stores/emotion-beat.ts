@@ -69,7 +69,7 @@ export const useEmotionBeatStore = create<EmotionBeatStore>((set, get) => ({
       // 如果已存在同章节的卡，更新它
       const existing = get().cards.find(c => c.chapterId === card.chapterId)
       if (existing?.id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         await db.emotionBeatCards.update(existing.id, dbCard as any)
         const updated = { ...card, id: existing.id, createdAt: existing.createdAt, updatedAt: now() }
         set({ cards: get().cards.map(c => c.id === existing.id ? updated : c) })
@@ -77,7 +77,7 @@ export const useEmotionBeatStore = create<EmotionBeatStore>((set, get) => ({
         return existing.id
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const id = await db.emotionBeatCards.add(dbCard as any) as number
       const newCard: EmotionBeatCard = { ...card, id, createdAt: now(), updatedAt: now() }
       set({ cards: [...get().cards, newCard] })
@@ -95,7 +95,7 @@ export const useEmotionBeatStore = create<EmotionBeatStore>((set, get) => ({
       if (data.beats) {
         patch.beats = toBeatString(data.beats)
       }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await db.emotionBeatCards.update(id, patch as any)
       set({
         cards: get().cards.map(c => c.id === id ? { ...c, ...data, updatedAt: now() } : c),

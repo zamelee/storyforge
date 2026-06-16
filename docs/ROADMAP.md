@@ -233,10 +233,11 @@
 - **改法**：先处理**数据破坏性 / 导入导出 / 设置**相关路径，统一走 `Dialog`（确认对话框 + Toast + 危险操作影响范围说明）。
 - **验收**：高风险操作不再用原生 `confirm`；失败提示带下一步建议。可分批，每批一 PR。
 
-### 🟠 AUDIT-3（决策③已定 · 尚未实施）— 引入 ESLint（先 warning 不 fail）
-- **现状**：**未配置**——无 eslint 依赖、无 `lint` 脚本、无配置文件（此前 commit message 声称"加 lint"但实际未落地，已核实）。
-- **改法**（§11.5 决策③）：装 ESLint + `@typescript-eslint` + `react-hooks` + `import/order`；**默认全 warning，CI 不阻断**；仅 `react-hooks/rules-of-hooks`、`no-floating-promises`（如启用 type-aware）设 error；留一轮清理期后再逐步收紧。`package.json` 加 `lint` 脚本，README 据此修正。
-- **验收**：`npm run lint` 可跑；CI 先不因 lint fail；高价值规则 error。
+### ✅ AUDIT-3（决策③ · 已完成 2026-06-16）— 引入 ESLint（先 warning 不 fail）
+- **做法**（§11.5 决策③）：装 ESLint 9 + typescript-eslint 8 + eslint-plugin-react-hooks 7 + eslint-plugin-import；扁平配置 `eslint.config.mjs`。**观察期策略**：默认全 warning（噪音大的 `no-explicit-any` 等降 warn/off）、仅 `react-hooks/rules-of-hooks` 设 error；`package.json` 加 `lint`/`lint:fix`；**`lint` 不进 `ci` 脚本**（CI 暂不因 lint fail）。
+- **现状基线**：`npm run lint` = 0 error / 29 warning（已 `--fix` 安全项，剩余为观察期允许的真实但低优先问题）。
+- **验收达成**：`npm run lint` 可跑；CI 不因 lint fail；rules-of-hooks 为 error 守住。
+- **待续**：type-aware 规则（`no-floating-promises` 等）未启用（需 type-checked config，lint 变慢）；`import/order` 已装插件未启用（避免一次性大量重排噪音）。后续清理一轮再收紧 + 接入 CI。
 
 ### 🟡 AUDIT-4（3.3 · 安全）— 出口 HTML/EPUB 用成熟 sanitizer + SVG XSS 回归测试
 - **位置**：`src/lib/export/sanitize-html.ts`（正则式，非 DOMPurify 级）、`src/lib/utils/sanitize-svg.ts` + `GeographyPanel` 的 `dangerouslySetInnerHTML`。

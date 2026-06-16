@@ -112,7 +112,7 @@ function tryParseWithRepair(jsonStr: string, mightBeTruncated = false): unknown 
  */
 function repairTruncatedJSON(s: string): string | null {
   // 去掉尾部的 ``` 残留
-  let text = s.replace(/```\s*$/, '').trimEnd()
+  const text = s.replace(/```\s*$/, '').trimEnd()
 
   // 最多尝试切 10000 字符找最后一个能解析的位置
   const maxTrim = Math.min(10000, text.length)

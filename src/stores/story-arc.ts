@@ -99,7 +99,7 @@ export const useStoryArcStore = create<StoryArcStore>((set, get) => ({
       for (let i = 0; i < stages.length; i++) {
         const s = stages[i]
         // 标注当前所处阶段
-        let marker = ''
+        const marker = ''
         if (currentChapterOrder !== undefined && s.startVolume !== undefined && s.endVolume !== undefined) {
           // 简化：暂用卷序号近似
         }

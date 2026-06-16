@@ -40,7 +40,7 @@ export default function WorldviewFieldEditor({
   const ai = useAIStream()
 
   // 切换字段时清空 AI 流 + 重置临时覆盖
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   useEffect(() => {
     ai.reset()
     setParameterValues({})

@@ -14,6 +14,8 @@
     "gen:ai-manual": "node scripts/generate-ai-manual.mjs",
     "check:ai-manual": "node scripts/generate-ai-manual.mjs --check",
     "check:architecture": "node scripts/check-architecture.mjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "ci": "npm run check:required-tables && npm run check:ai-manual && npm run check:architecture && npx tsc --noEmit && npm run test:coverage && npm run build"
   },
   "dependencies": {
@@ -42,11 +44,15 @@
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/coverage-v8": "^2.1.9",
     "autoprefixer": "^10.4.20",
+    "eslint": "^9.39.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.5",
     "happy-dom": "^20.10.2",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.6.0",
+    "typescript-eslint": "^8.61.1",
     "vite": "^6.0.0",
     "vite-plugin-pwa": "^1.2.0",
     "vitest": "^2.1.9"

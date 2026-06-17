@@ -1,5 +1,6 @@
 import { useState, type ComponentType, type ReactElement } from 'react'
 import { ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, Settings } from 'lucide-react'
+import { APP_VERSION } from '../../lib/version'
 import {
   NAV_TREE, getBranchChain,
   type SidebarModule, type TreeLeaf, type TreeNode,
@@ -131,6 +132,11 @@ export default function Sidebar({
         >
           <Settings className="w-4 h-4" />
         </button>
+        {!collapsed && (
+          <span className="text-[10px] text-text-muted font-mono" title="当前版本号">
+            {APP_VERSION}
+          </span>
+        )}
         <button
           onClick={onToggleCollapse}
           title={collapsed ? '展开侧边栏' : '折叠侧边栏'}

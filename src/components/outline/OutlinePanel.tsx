@@ -861,7 +861,7 @@ export default function OutlinePanel({ project, onOpenChapter }: Props) {
                 className="text-lg font-bold bg-transparent text-text-primary outline-none flex-1"
               />
               <div className="flex items-center gap-1.5">
-                {!selectedVol.summary.trim() && (
+                {!selectedVol.summary?.trim() && (
                   <button
                     onClick={() => prepareGeneration({ kind: 'single-volume', volumeId: selectedVol.id! })}
                     disabled={ai.isStreaming}
@@ -1082,9 +1082,9 @@ function ChapterRow({ ch, idx, onUpdate, onDelete, onOpen, dnd, onInsertAfter, o
         />
       </div>
       <div className={`flex items-center gap-0.5 transition-opacity shrink-0 mt-1 ${
-        !ch.summary.trim() && onGenerate ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+        !ch.summary?.trim() && onGenerate ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
       }`}>
-        {!ch.summary.trim() && onGenerate && (
+        {!ch.summary?.trim() && onGenerate && (
           <button onClick={onGenerate} className="p-1 text-text-muted hover:text-accent rounded" title="AI 生成本章章纲">
             <Sparkles className="w-3.5 h-3.5" />
           </button>
@@ -1216,3 +1216,4 @@ function StructureMenu({ onSelect }: { onSelect: (s: StoryStructure) => void }) 
     </div>
   )
 }
+

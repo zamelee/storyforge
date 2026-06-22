@@ -11,6 +11,8 @@ import { ensureSchema, REQUIRED_TABLES } from './lib/db/ensure-schema'
 import { validateRegistry } from './lib/registry/validate'
 import { db } from './lib/db/schema'
 import { finalizeCharacterAxesMigrationSnapshots } from './lib/migrations/finalize-character-axes-snapshots'
+// dev: ensure assemble-context module is loaded so window.__assembleContext is available at app boot
+if (import.meta.env && import.meta.env.DEV) void import('./lib/registry/assemble-context')
 import './index.css'
 
 // 从 localStorage 恢复主题（兼容旧主题名迁移）

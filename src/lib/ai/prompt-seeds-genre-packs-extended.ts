@@ -6,6 +6,8 @@
  * 每个包聚焦最关键的 2 个模板，其他模块复用通用包。
  */
 import type { PromptSeed } from './prompt-seeds'
+import { OUTLINE_CHARACTER_BINDING } from './outline-fragments'
+void OUTLINE_CHARACTER_BINDING;
 
 // ── 玄幻 ──────────────────────────────────────────
 
@@ -65,14 +67,32 @@ const XUANHUAN: PromptSeed[] = [
 4. 金手指/宝物/功法的获取要分散到各卷，不能一次给完
 
 输出格式：JSON 数组 [{title, summary, keyEvents}]`,
-    userPromptTemplate: `根据以下世界观和故事核心，规划卷级大纲：
+    userPromptTemplate: `根据以下世界观和故事核心，规划玄幻题材的卷级大纲：
 
-故事核心：{{storySeed}}
-世界观：{{worldContext}}
-主角：{{protagonist}}
-目标章数：约 {{totalChapters}} 章{{#if userHint}}
-额外要求：{{userHint}}{{/if}}`,
-    variables: ['storySeed', 'worldContext', 'protagonist', 'totalChapters', 'userHint'],
+小说名称：{{projectName}}
+小说类型：{{genres}}
+目标字数：约 {{targetWordCount}} 字
+故事核心：{{storyCore}}
+
+世界观：
+{{worldContext}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+{{#if worldRulesContext}}
+
+{{worldRulesContext}}
+{{/if}}
+{{#if existingVolumesContext}}
+{{existingVolumesContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}
+
+请按玄幻节奏（地图切换 + 境界突破）生成卷级大纲。{{#if userHint}}
+用户补充要求：{{userHint}}{{/if}}`,
+    variables: ['projectName', 'genres', 'targetWordCount', 'storyCore', 'worldContext', 'characterContext', 'worldRulesContext', 'existingVolumesContext', 'userHint'],
     parameters: [],
     isActive: false,
   },
@@ -230,11 +250,24 @@ const LISHI: PromptSeed[] = [
     userPromptTemplate: `请为以下卷设计章节大纲：
 
 卷名/阶段：{{volumeTitle}}
+小说类型：{{genres}}
+小说名称：{{projectName}}
 故事背景：{{worldContext}}
 本卷主线：{{volumeSummary}}
-主要角色：{{characters}}{{#if userHint}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+{{#if worldRulesContext}}
+
+{{worldRulesContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}
+
+涉及真实历史时按上文 systemPrompt 提示标注 ⚠️ 史实待核实。{{#if userHint}}
 额外要求：{{userHint}}{{/if}}`,
-    variables: ['volumeTitle', 'worldContext', 'volumeSummary', 'characters', 'userHint'],
+    variables: ['volumeTitle', 'projectName', 'genres', 'worldContext', 'volumeSummary', 'characterContext', 'worldRulesContext', 'userHint'],
     isActive: false,
   },
 ]

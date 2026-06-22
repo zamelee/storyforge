@@ -46,9 +46,9 @@ async function readPowerSystem(projectId: number, worldGroupId?: number | null):
 
 async function readCharacters(projectId: number, worldGroupId?: number | null): Promise<Character[]> {
   const rows = await db.characters.where('projectId').equals(projectId).toArray()
-  if (!hasExplicitWorldGroupId({ worldGroupId })) return rows
-  const wg = worldGroupId ?? null
-  return rows.filter(c => c.isCrossWorld || (c.homeWorldGroupId ?? null) === wg)
+  // 显式传 null / undefined,语义是"不分组" -> 返回该 project 下全部角色（含跨世界标记的）
+  if (worldGroupId == null) return rows
+  return rows.filter(c => c.isCrossWorld || (c.homeWorldGroupId ?? null) === worldGroupId)
 }
 
 async function readForeshadows(projectId: number, chapterId?: number | null): Promise<string> {

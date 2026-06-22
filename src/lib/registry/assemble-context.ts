@@ -25,7 +25,14 @@ function deriveInputBudget(input: AssembleContextInput): number {
   return FALLBACK_INPUT_BUDGET
 }
 
+
+
+// DEV 环境自挂到 window,方便 DevTools console 直接调用: window.__assembleContext({...})
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
+  (window as unknown as { __assembleContext?: typeof assembleContext }).__assembleContext = assembleContext
+}
 export async function assembleContext(input: AssembleContextInput): Promise<AssembleContextResult> {
+  if (import.meta.env?.DEV && typeof window !== 'undefined') { (window as unknown as { __assembleContext?: typeof assembleContext }).__assembleContext = assembleContext }
   const selected = selectSources(input)
   const omitted: string[] = []
   const keyedSegments: { key: string; segment: ContextSegment }[] = []
@@ -42,6 +49,7 @@ export async function assembleContext(input: AssembleContextInput): Promise<Asse
     const content = await source.read(input)
     if (!content.trim()) {
       omitted.push(source.key)
+      if (import.meta.env?.DEV) console.warn(`[assembleContext] source ${source.key} returned empty content for project ${input.projectId} (worldGroupId=${input.worldGroupId}, outlineNodeId=${input.outlineNodeId})`)
       continue
     }
     const capped = capBySourceBudget(content, source.budgetTokens)

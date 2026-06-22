@@ -129,7 +129,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `foreshadow.suggest` | `src/components/foreshadow/ForeshadowPanel.tsx:159` |
 | `geography.concept-map` | `src/components/geography/GeographyPanel.tsx:127` |
 | `geography.world-map` | `src/components/geography/WorldMapPanel.tsx:103` |
-| `inspiration.reverse` | `src/components/project/InspirationPanel.tsx:106` |
+| `inspiration.reverse` | `src/components/project/InspirationPanel.tsx:119` |
 | `inventory.extract` | `src/components/items/InventoryPanel.tsx:84` |
 | `location.extract` | `src/components/location/LocationPanel.tsx:104` |
 | `outline.chapter` | `src/components/outline/OutlinePanel.tsx:376`<br/>`src/lib/ai/batch-outline-runner.ts:123` |
@@ -161,4 +161,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `241a795`
+生成时间基准:commit `1822b92`

@@ -118,10 +118,12 @@ export function buildInspirationReverseMultiWorldPrompt(
 }
 
 export function parseReverseMultiWorldOutput(output: string): ReverseMultiWorldResult | null {
-  const jsonMatch = output.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
-  const jsonStr = jsonMatch ? jsonMatch[1].trim() : output.trim()
+  const p = extractJsonCandidate(output) as any
+  if (!p) {
+    console.warn('[inspiration.reverse.multiworld] parse failed, no JSON candidate extracted')
+    return null
+  }
   try {
-    const p = JSON.parse(jsonStr)
     const storyCore: ReverseStoryCore = {
       logline: String(p.storyCore?.logline || ''),
       theme: String(p.storyCore?.theme || ''),
@@ -185,11 +187,13 @@ export function buildInspirationReversePrompt(
 // ── 解析输出 ─────────────────────────────────────────────────────────────
 
 export function parseReverseOutput(output: string): ReverseResult | null {
-  const jsonMatch = output.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
-  const jsonStr = jsonMatch ? jsonMatch[1].trim() : output.trim()
+  const parsed = extractJsonCandidate(output) as any
+  if (!parsed) {
+    console.warn('[inspiration.reverse] parse failed, no JSON candidate extracted')
+    return null
+  }
 
   try {
-    const parsed = JSON.parse(jsonStr)
 
     const worldview: ReverseWorldview = {
       worldOrigin: String(parsed.worldview?.worldOrigin || ''),
@@ -225,4 +229,142 @@ export function parseReverseOutput(output: string): ReverseResult | null {
   } catch {
     return null
   }
+}
+
+// ---- shared: extract first complete JSON object from AI stream output ------------------
+//
+// Why: the previous parser used a single regex that returned null on any malformed
+// output, causing the inspiration reverse panel to show the structured-output hint
+// (driven by AIStreamOutput.isStructured) but never render the bottom adopt cards
+// (driven by this parser). Best-effort fallback strategy:
+//   (a) try a markdown code fence
+//   (b) try the whole trimmed output as JSON
+//   (c) scan for the first balanced top-level { ... } and try that
+function extractJsonCandidate(output: string): Record<string, unknown> | null {
+  if (!output) return null
+  const trimmed = output.trim()
+
+  // We try each candidate strategy in order, and on failure retry once after
+  // sanitizing stray double quotes inside JSON string values (a common model
+  // quirk: it writes bare `"` to quote a term inside a JSON string value,
+  // breaking JSON.parse).
+
+  const fenceMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+  const fromFence = fenceMatch ? fenceMatch[1].trim() : ""
+
+  const candidates: string[] = []
+  if (fromFence) candidates.push(fromFence)
+  candidates.push(trimmed)
+
+  for (const c of candidates) {
+    if (!c) continue
+    const direct = tryParseJson(c)
+    if (direct) return direct
+    if (c.startsWith("{") || c.startsWith("[")) {
+      const sliced = sliceFirstCompleteJson(c)
+      const parsed = sliced ? tryParseJson(sliced) : null
+      if (parsed) return parsed
+    }
+    const repaired = tryParseJson(sanitizeStrayQuotesInJsonString(c))
+    if (repaired) return repaired
+  }
+
+  // (c) skip prefix explanation text and try the first balanced object
+  const braceStart = trimmed.indexOf("{")
+  if (braceStart >= 0) {
+    const sliced = sliceFirstCompleteJson(trimmed.slice(braceStart))
+    if (sliced) {
+      const direct = tryParseJson(sliced)
+      if (direct) return direct
+      const repaired = tryParseJson(sanitizeStrayQuotesInJsonString(sliced))
+      if (repaired) return repaired
+    }
+  }
+
+  return null
+}
+
+// ---- shared: repair bare double quotes inside JSON string values ---------
+//
+// Heuristic only. When walking a string value, if we see `"` that is NOT
+// followed (after whitespace) by a JSON structural char ("," "}" "]" ":"),
+// we treat it as a stray nested quote and replace it with U+201C/U+201D so
+// the outer string stays open. Real closers are preserved.
+//
+// This covers the common model output pattern:
+//   "worldOrigin": "现代都市现实世界...虚构的国内一线城市"云城"。没有..."
+// where the model embeds `"云城"` directly in the value.
+function sanitizeStrayQuotesInJsonString(input: string): string {
+  if (!input) return input
+  let out = ""
+  let inString = false
+  let escape = false
+  let nextQuote: "open" | "close" = "open"
+  const OPEN = "\u201C"
+  const CLOSE = "\u201D"
+  const structural = new Set([",", "}", "]", ":"])
+  const ws = new Set([" ", "\t", "\r", "\n"])
+  const peekNonWs = (start: number): string => {
+    let k = start
+    while (k < input.length && ws.has(input[k])) k++
+    return input[k] || ""
+  }
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]
+    if (inString) {
+      if (escape) { out += ch; escape = false; continue }
+      if (ch === "\\") { out += ch; escape = true; continue }
+      if (ch === "\"") {
+        const nx = peekNonWs(i + 1)
+        if (structural.has(nx)) {
+          out += "\""
+          inString = false
+          nextQuote = "open"
+        } else {
+          out += nextQuote === "open" ? OPEN : CLOSE
+          nextQuote = nextQuote === "open" ? "close" : "open"
+        }
+        continue
+      }
+      out += ch
+      continue
+    }
+    if (ch === "\"") {
+      out += ch
+      inString = true
+      continue
+    }
+    out += ch
+  }
+  return out
+}
+
+function tryParseJson(s: string): Record<string, unknown> | null {
+  if (!s) return null
+  try { return JSON.parse(s) } catch { return null }
+}
+
+function sliceFirstCompleteJson(input: string): string | null {
+  const open = input[0]
+  if (open !== "{" && open !== "[") return null
+  const close = open === "[" ? "]" : "}"
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i]
+    if (inString) {
+      if (escape) { escape = false; continue }
+      if (ch === "\\") { escape = true; continue }
+      if (ch === "\"") inString = false
+      continue
+    }
+    if (ch === "\"") { inString = true; continue }
+    if (ch === open) depth++
+    else if (ch === close) {
+      depth--
+      if (depth === 0) return input.slice(0, i + 1)
+    }
+  }
+  return null
 }

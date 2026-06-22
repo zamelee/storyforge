@@ -10,6 +10,10 @@ import type { AssembleContextInput, AssembleContextResult, ContextSource } from 
 /** 拿不到模型时的保守默认输入预算(原固定 24K 偏紧,放宽避免内部提前裁) */
 const FALLBACK_INPUT_BUDGET = 48_000
 const LAYERS_BY_TRIM_PRIORITY: ContextLayer[] = ['L3', 'L2', 'L1']
+// 核心上下文源:即使总 token 超预算,也不允许整段删除,只允许 content 截短。
+// 这些是 AI 大纲生成必需的最小上下文:世界观、故事核心、角色库、世界规则。
+const CORE_SOURCE_KEYS = new Set(['worldview', 'storyCore', 'characters', 'worldRules', 'existingVolumeOutlines', 'chapterOutline', 'chapterContent', 'detailedOutline'])
+
 
 /**
  * 输入预算 = 所选模型的上下文窗口(减输出预留与安全边际)。
@@ -112,13 +116,29 @@ function trimToFit(
   let total = kept.reduce((sum, s) => sum + s.segment.tokens, 0)
   if (total <= inputBudget) return { kept, trimmed }
 
+  // 先按 L3 -> L2 -> L1 优先级裁剪非 CORE 段
   for (const layer of LAYERS_BY_TRIM_PRIORITY) {
     if (total <= inputBudget) break
-    const removed = kept.filter(s => s.segment.layer === layer && s.segment.trimmable)
+    const removed = kept.filter(s => s.segment.layer === layer && s.segment.trimmable && !CORE_SOURCE_KEYS.has(s.key))
     if (!removed.length) continue
-    kept = kept.filter(s => s.segment.layer !== layer || !s.segment.trimmable)
+    kept = kept.filter(s => s.segment.layer !== layer || !s.segment.trimmable || CORE_SOURCE_KEYS.has(s.key))
     total = kept.reduce((sum, s) => sum + s.segment.tokens, 0)
     trimmed.push(...removed.map(s => s.key))
+  }
+
+  // 仍超预算:对 CORE 段按 content 截短(保留段,只缩短内容)
+  if (total > inputBudget) {
+    for (const item of kept) {
+      if (total <= inputBudget) break
+      if (!CORE_SOURCE_KEYS.has(item.key)) continue
+      const overflow = total - inputBudget
+      const targetTokens = Math.max(64, item.segment.tokens - overflow - 32)
+      if (item.segment.tokens <= targetTokens) continue
+      const approxChars = Math.max(40, Math.floor(targetTokens * 1.4))
+      item.segment.content = item.segment.content.slice(0, approxChars) + '\n...(核心上下文源已按预算截断)'
+      item.segment.tokens = estimateTokens(item.segment.content)
+      total = kept.reduce((sum, s) => sum + s.segment.tokens, 0)
+    }
   }
 
   return { kept, trimmed }

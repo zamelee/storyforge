@@ -145,7 +145,7 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 | `review.revise` | `src/components/editor/ChapterEditor.tsx:363` |
 | `rules.generate` | `src/components/rules/CreativeRulesPanel.tsx:80` |
 | `scene.verify` | `src/components/scene/SceneVerifyPanel.tsx:81` |
-| `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:84` |
+| `story-arc.generate` | `src/components/outline/StoryArcPanel.tsx:90` |
 | `story.generate` | `src/components/worldview/StoryCorePanel.tsx:193` |
 | `story.timeline` | `src/components/timeline/StoryTimelinePanel.tsx:83` |
 | `style.learn` | `src/components/style/StyleLearningPanel.tsx:76` |
@@ -161,4 +161,4 @@ AI 输出经 `adopt({ target, data })` 写回,只有这里登记的字段可写(
 
 ---
 
-生成时间基准:commit `4f043db`
+生成时间基准:commit `1fa8c92`

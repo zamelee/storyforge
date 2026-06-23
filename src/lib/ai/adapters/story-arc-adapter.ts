@@ -1,8 +1,9 @@
 /**
- * 故事线 AI 适配器 — Phase B2
- * 根据世界观 + 故事核心 + 大纲 → AI 规划全局故事线
+ * 故事线 AI 适配器 — Phase B2 + R-20:接 characterContext 与角色铁律。
+ * 根据世界观 + 故事核心 + 大纲 + 已建角色库 → AI 规划全局故事线
  */
 import type { ChatMessage } from '../../types'
+import { OUTLINE_CHARACTER_BINDING } from '../outline-fragments'
 
 export function buildStoryArcPrompt(
   projectName: string,
@@ -12,10 +13,12 @@ export function buildStoryArcPrompt(
   outlineSummary: string,
   arcType: 'main' | 'sub' = 'main',
   existingArcs?: string,
+  /** R-20: 已建角色库上下文,用于生成时强制按角色库选人 */
+  characterContext?: string,
 ): ChatMessage[] {
   const typeLabel = arcType === 'main' ? '主线故事线' : '支线故事线'
 
-  const systemPrompt = `你是一个专业小说策划师。根据提供的世界观、故事核心和大纲信息，规划一条完整的${typeLabel}。
+  const systemPrompt = `你是一个专业小说策划师。根据提供的世界观、故事核心、大纲信息和已建角色库，规划一条完整的${typeLabel}。
 
 要求：
 1. 故事线应包含 3-7 个阶段，每个阶段有清晰的起止
@@ -23,6 +26,7 @@ export function buildStoryArcPrompt(
 3. 重要阶段应标注转折点
 4. 阶段之间要有因果递进关系，形成完整的叙事弧线
 5. ${arcType === 'main' ? '主线应贯穿全书，从开篇到结局' : '支线应与主线交织但有独立发展'}
+6. 阶段关键事件中的主角、配角、反派必须从下方「已创建的角色」中选取,严禁凭空捏造新的人名/势力名作为核心角色。
 
 输出严格 JSON 格式，不要加 markdown 代码块：
 {
@@ -36,18 +40,21 @@ export function buildStoryArcPrompt(
       "turningPoint": "转折点描述（可选，无则不填）"
     }
   ]
-}`
+}
+`
 
   const parts = [`【项目】${projectName}（${genre || '未知题材'}）`]
-  if (worldContext) parts.push(`【世界观】\n${worldContext.slice(0, 500)}`)
-  if (storyCore) parts.push(`【故事核心】\n${storyCore.slice(0, 500)}`)
-  if (outlineSummary) parts.push(`【大纲摘要】\n${outlineSummary.slice(0, 500)}`)
+  if (worldContext) parts.push(`【世界观】\n${worldContext}`)
+  if (storyCore) parts.push(`【故事核心】\n${storyCore}`)
+  if (outlineSummary) parts.push(`【大纲摘要】\n${outlineSummary}`)
+  if (characterContext) parts.push(`【已创建的角色】\n${characterContext}`)
   if (existingArcs) parts.push(`【已有故事线】\n${existingArcs}`)
 
   const userPrompt = parts.join('\n\n') + `\n\n请为这部作品规划一条${typeLabel}：`
 
+  // R-20:把 OUTLINE_CHARACTER_BINDING 注入 system 末尾，让 AI 强制按角色库选取
   return [
-    { role: 'system', content: systemPrompt },
+    { role: 'system', content: systemPrompt + OUTLINE_CHARACTER_BINDING },
     { role: 'user', content: userPrompt },
   ]
 }

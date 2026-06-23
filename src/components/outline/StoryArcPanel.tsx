@@ -60,6 +60,11 @@ export default function StoryArcPanel({ project }: Props) {
       worldGroupId: null,
       sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
     })
+
+    function contextPart(assembled: any, key: string): string {
+      const i = assembled.included.indexOf(key)
+      return i >= 0 ? assembled.segments[i]?.content ?? '' : ''
+    }
     const worldCtx = assembled.text
     const storyCoreCtx = [
       storyCore?.theme && `主题：${storyCore.theme}`,
@@ -78,8 +83,9 @@ export default function StoryArcPanel({ project }: Props) {
       ? arcs.map(a => `[${a.type === 'main' ? '主线' : '支线'}] ${a.name}：${a.description || ''}`).join('\n')
       : undefined
 
+    const characterCtx = contextPart(assembled, 'characters')
     const messages = buildStoryArcPrompt(
-      project.name, project.genre || '', worldCtx, storyCoreCtx, outlineSummary, genType, existingArcs,
+      project.name, project.genre || '', worldCtx, storyCoreCtx, outlineSummary, genType, existingArcs, characterCtx,
     )
     const raw = await ai.start(messages, undefined, { category: 'story-arc.generate', projectId: project.id! })
     if (!raw) return

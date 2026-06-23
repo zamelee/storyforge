@@ -11,6 +11,8 @@ import { ensureSchema, REQUIRED_TABLES } from './lib/db/ensure-schema'
 import { validateRegistry } from './lib/registry/validate'
 import { db } from './lib/db/schema'
 import { finalizeCharacterAxesMigrationSnapshots } from './lib/migrations/finalize-character-axes-snapshots'
+// LLM 监控探针:自启动 fetch 拦截器 + 挂载 UI(默认 enabled=false,在设置页打开)
+import './lib/debug/install'
 // dev: ensure assemble-context module is loaded so window.__assembleContext is available at app boot
 if (import.meta.env && import.meta.env.DEV) void import('./lib/registry/assemble-context')
 import './index.css'

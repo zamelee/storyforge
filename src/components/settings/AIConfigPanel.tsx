@@ -1,6 +1,7 @@
 import { useState, useEffect, useSyncExternalStore } from 'react'
 import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
+import { useLLMMonitorStore } from '../../lib/debug/store'
 import type { AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
 import { getLogs, subscribeLogs, clearLogs, formatLog } from '../../lib/ai/logger'
@@ -36,7 +37,11 @@ export default function AIConfigPanel() {
     rememberApiKey, setRememberApiKey,
     presets, activePresetId, saveAsPreset, applyPreset, updatePresetFromCurrent, renamePreset, deletePreset } = useAIConfigStore()
   const dialog = useDialog()
-  const [showKey, setShowKey] = useState(false)
+  const llmMonitorEnabled = useLLMMonitorStore((s) => s.enabled)
+  const llmMonitorSetEnabled = useLLMMonitorStore((s) => s.setEnabled)
+  const llmMonitorConfirmed = useLLMMonitorStore((s) => s.confirmed)
+  const llmMonitorSetConfirmed = useLLMMonitorStore((s) => s.setConfirmed)
+    const [showKey, setShowKey] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [showLogs, setShowLogs] = useState(false)
@@ -456,6 +461,32 @@ export default function AIConfigPanel() {
           </div>
         </div>
       )}
+
+      {/* LLM 监控探针 */}
+      <div className="bg-bg-surface border border-border rounded-xl p-5 mb-6">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-semibold text-text-primary mb-1">LLM 监控探针</h3>
+            <p className="text-xs text-text-muted leading-relaxed">右下角悬浮按钮 + 浮窗,实时查看所有 AI 调用的请求 / 响应。开启后会把 prompt 与响应文本保留在浏览器内存中,5 分钟无操作自动清空;关闭则不占任何资源。</p>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
+            <input type="checkbox" checked={llmMonitorEnabled} onChange={async (e) => {
+              const v = e.target.checked
+              if (v && !llmMonitorConfirmed) {
+                const ok = await dialog.confirm({
+                  title: '启用 LLM 监控?',
+                  message: '此工具会把所有 LLM 调用的请求和响应文本保留在浏览器内存中(包括世界观/角色库/未公开剧情等敏感数据)。\n\n开启后 5 分钟无操作会自动清空。\n\n确认启用?',
+                  confirmText: '我已了解,启用', 
+                })
+                if (!ok) return
+                llmMonitorSetConfirmed()
+              }
+              llmMonitorSetEnabled(v)
+            }} className="accent-accent w-4 h-4" />
+            <span className="text-sm text-text-secondary">启用</span>
+          </label>
+        </div>
+      </div>
 
       {/* 主题切换 */}
       <div className="bg-bg-surface border border-border rounded-xl p-5">

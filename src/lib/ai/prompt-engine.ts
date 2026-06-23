@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../types'
+import { OUTLINE_CHARACTER_BINDING } from './outline-fragments'
 import type { PromptTemplate, PromptVariableContext } from '../types'
 
 /**
@@ -29,6 +30,8 @@ export function renderPrompt(
 ): { messages: ChatMessage[]; modelOverride?: { temperature?: number; maxTokens?: number } } {
   // 1. 把模板参数注入到 ctx（运行时值覆盖默认值）
   const enriched: PromptVariableContext = { ...ctx }
+  // 注入内建片段常量（如角色绑定铁律）。这些是宏而非用户变量，模板里用 {{NAME}} 引用。
+  enriched.OUTLINE_CHARACTER_BINDING = OUTLINE_CHARACTER_BINDING
   if (template.parameters && template.parameters.length > 0) {
     for (const p of template.parameters) {
       const userVal = options?.parameterValues?.[p.key]
@@ -58,6 +61,9 @@ export function renderPrompt(
 
   let userContent = renderString(userSrc, enriched, template.moduleKey)
   const systemContent = renderString(sysSrc, enriched, template.moduleKey)
+    // 同时把 OUTLINE_CHARACTER_BINDING 注入到 systemPrompt 末尾
+    // 原因: AI 倾向遵循 system 级别约束;user 级别的"严禁"易被忽略
+    .concat(enriched.OUTLINE_CHARACTER_BINDING ? '\n\n' + enriched.OUTLINE_CHARACTER_BINDING : '')
 
   // P15: 拼接示例（few-shot）到 user prompt 末尾
   // - good 示例：作者标记的"输出风格参考"

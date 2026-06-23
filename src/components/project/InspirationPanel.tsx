@@ -78,17 +78,30 @@ export default function InspirationPanel({ project }: Props) {
   }, [draftKey, inspiration, userHint, result, mwResult, mwAdopted])
 
   // 解析 AI 输出（多世界 / 单世界两条路径）
+  //
+  // 行为：
+  //   1) 流过程中（ai.isStreaming === true）也尝试解析，模型一旦吐出完整 JSON 就先
+  //      显示底部卡片，避免卡片的渲染晚于顶部“✓ 已生成结构化内容”提示。
+  //   2) 流结束后再 setTimeout(50ms) 解析一次，捕捉末尾的补全字符 / 闭合符号。
+  //   3) parseReverse* 内部已有 fenced/prefix/balanced 三级容错，这里只是触发时机。
   useEffect(() => {
-    if (ai.isStreaming || !ai.output) return
-    if (isMW) {
-      const parsed = parseReverseMultiWorldOutput(ai.output)
-      if (parsed) setMwResult(parsed)
-    } else {
-      const parsed = parseReverseOutput(ai.output)
-      if (parsed) {
-        setResult(parsed)
-        setSelectedChars(new Set(parsed.characters.map((_, i) => i)))
+    if (!ai.output) return
+    const tryParse = () => {
+      if (isMW) {
+        const parsed = parseReverseMultiWorldOutput(ai.output)
+        if (parsed) setMwResult(parsed)
+      } else {
+        const parsed = parseReverseOutput(ai.output)
+        if (parsed) {
+          setResult(parsed)
+          setSelectedChars(new Set(parsed.characters.map((_, i) => i)))
+        }
       }
+    }
+    tryParse()
+    if (!ai.isStreaming) {
+      const t = setTimeout(tryParse, 50)
+      return () => clearTimeout(t)
     }
   }, [ai.isStreaming, ai.output, isMW])
 

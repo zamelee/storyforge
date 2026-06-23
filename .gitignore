@@ -11,3 +11,7 @@ public/fmg/
 tree.txt
 *.bak
 coverage/
+
+# Local scratch / debug artifacts
+.tmp/
+

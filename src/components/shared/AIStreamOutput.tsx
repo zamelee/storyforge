@@ -49,9 +49,20 @@ export default function AIStreamOutput({
 
   // 检测是否结构化输出（JSON）——这类内容是给程序解析的，不该让用户直接读原始 JSON
   const trimmed = output.trimStart()
-  const isStructured = hasOutput && (
+  const looksStructured = hasOutput && (
     trimmed.startsWith('{') || trimmed.startsWith('[') || /^```(?:json)?\s*[[{]/.test(trimmed)
   )
+  // 首字符判定只是“看起来像”，首字符 { 并不等于合法 JSON。
+  // 在流结束后做一次真正的 JSON.parse 校验，避免顶部“✓ 已生成结构化内容”误报：
+  // 误报会让用户以为采纳按钮有内容可写，而实际上程序拿不到结果去填栏目。
+  // 流过程中允许“看起来像”就显示中间态提示，流结束时再校验。
+  const isValidStructuredJson = (s: string): boolean => {
+    if (!s) return false
+    const m = s.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+    const candidate = (m ? m[1] : s).trim()
+    try { JSON.parse(candidate); return true } catch { return false }
+  }
+  const isStructured = looksStructured && (isStreaming || isValidStructuredJson(output))
 
   /** 把当前输出存为模板的好/坏示例 */
   const handleMark = async (kind: 'good' | 'bad') => {

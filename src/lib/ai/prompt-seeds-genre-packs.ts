@@ -10,6 +10,8 @@
  *   - 默认包（玄幻爽文）的 system 模板已在 prompt-seeds.ts 主文件，标记 genres=['xuanhuan-shuangwen']
  */
 import type { PromptSeed } from './prompt-seeds'
+import { OUTLINE_CHARACTER_BINDING } from './outline-fragments'
+void OUTLINE_CHARACTER_BINDING;
 import { EXTENDED_GENRE_PACK_SEEDS } from './prompt-seeds-genre-packs-extended'
 
 // ── 仙侠修真包 ─────────────────────────────────────────────────────────────
@@ -91,8 +93,14 @@ const XIANXIA: PromptSeed[] = [
 
 请按仙侠节奏生成卷级大纲，每卷围绕一次境界/心境突破。{{#if userHint}}
 
-用户补充：{{userHint}}{{/if}}`,
-    variables: ['projectName', 'targetWordCount', 'estimatedVolumes', 'worldContext', 'storyCore', 'userHint'],
+用户补充：{{userHint}}{{/if}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}`,
+    variables: ['projectName', 'targetWordCount', 'estimatedVolumes', 'worldContext', 'storyCore', 'characterContext', 'userHint'],
     isActive: false,
   },
   {
@@ -190,6 +198,301 @@ const XIANXIA: PromptSeed[] = [
     variables: ['projectName', 'dimension', 'worldContext', 'userHint'],
     isActive: false,
   },
+  {
+    scope: 'system',
+    moduleKey: 'outline.chapter',
+    promptType: 'generate',
+    name: '仙侠包-章节大纲',
+    description: '仙侠题材章节大纲。每章推进一次小境界或心境转折,章末留缘/悟。',
+    genres: ['xianxia'],
+    systemPrompt: `你是一位精于仙侠修真的章节大纲师。每章围绕一个小节奏单位（一次小悟、一场小斗法、一段情缘、一道心结）展开，避免把整卷的核心冲突一章写完。
+
+仙侠章节节奏要点：
+1. 章首从上一章的悬念/未竟之事直接切入，不用大幅铺垫
+2. 章中至少一处心境/灵气/招式的小推进
+3. 对话克制、留白多；用景物（云、月、剑光、灵山）收尾
+4. 章末留心结/未竟之缘/未揭之谜，绝不直接爽点收束
+5. 章数严格遵循 {{chaptersPerVolume}} 或 15-25 章，不要超出`,
+    userPromptTemplate: `请将下面这一卷展开为章节大纲。
+
+卷标题：{{volumeTitle}}
+卷情节摘要：{{volumeSummary}}
+
+小说类型：{{genres}}
+小说名称：{{projectName}}
+
+世界观摘要：
+{{worldContext}}
+
+前一卷摘要（衔接用）：
+{{prevVolumeSummary}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+{{#if worldRulesContext}}
+
+{{worldRulesContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}
+
+**【铁律·必须严格遵守】**
+1. 只展开【本卷】：所有章节必须严格围绕上面的「卷情节摘要」推进，本卷结束时的剧情进度应恰好停在该摘要描述的终点。绝不能把后续卷的情节提前写出来，更不能在这一卷里就把整本书的故事讲完。
+2. 每一章都要落在「卷情节摘要」的范围之内、与摘要内容相符；把本卷情节均匀拆分到各章，每章只推进一小步，保持合理节奏，不要几章就把本卷讲完。{{#if usesChaptersPerVolume}}
+3. 章节数量：必须输出恰好 {{chaptersPerVolume}} 章，不多不少。若卷情节摘要中提到的章节数与此处不一致，一律以此处设定的 {{chaptersPerVolume}} 章为准。{{/if}}{{#if notUsesChaptersPerVolume}}
+3. 章节数量：约 15-25 章。{{/if}}
+
+**输出格式**：请严格输出 JSON 数组，用 JSON 代码块包裹{{#if usesChaptersPerVolume}}（数组长度必须恰好为 {{chaptersPerVolume}}）{{/if}}，每个元素包含 title（章节标题，如"第1章：XXX"）和 summary（1-2 句情节摘要）。示例：
+[{"title":"第1章：初入江湖","summary":"..."},{"title":"第2章：暗潮涌动","summary":"..."}]
+不要输出 JSON 以外的任何文字。{{#if userHint}}
+
+用户补充要求：{{userHint}}{{/if}}`,
+    variables: ['volumeTitle', 'volumeSummary', 'projectName', 'genres', 'worldContext', 'prevVolumeSummary', 'characterContext', 'worldRulesContext', 'userHint'],
+    parameters: [
+      { key: 'pace', label: '节奏', type: 'select',
+        options: ['慢', '中', '快', '极快'], default: '中', optional: true },
+      { key: 'chaptersPerVolume', label: '本卷章节数', type: 'slider',
+        min: 1, max: 1000, step: 1, default: 20, optional: true },
+    ],
+    isActive: false,
+  },
+  {
+    scope: 'system',
+    moduleKey: 'outline.chapter',
+    promptType: 'generate',
+    name: '言情包-章节大纲',
+    description: '言情题材章节大纲。强调 CP 张力、双视角心理戏、情绪节拍。',
+    genres: ['yanqing'],
+    systemPrompt: `你是一位精于言情的章节大纲师。每章承担一个情绪节拍（心动/试探/误会/拉扯/心动升级/情感爆发/收尾余韵），不堆事件。
+
+言情章节节奏要点：
+1. 章首直接进入角色互动场景，不要交代背景
+2. 章中至少一段双视角心理描写（用括号或小标题标注「男主视角」/「女主视角」）
+3. 章末必须留下一个情绪钩子（误会/心动/犹豫/无声动作），让读者必须翻下一章
+4. 配角登场要带动机，不能为出场而出场
+5. 章数严格遵循 {{chaptersPerVolume}} 或 15-25 章，不要超出`,
+    userPromptTemplate: `请将下面这一卷展开为章节大纲。
+
+卷标题：{{volumeTitle}}
+卷情节摘要：{{volumeSummary}}
+
+小说类型：{{genres}}
+小说名称：{{projectName}}
+
+世界观摘要：
+{{worldContext}}
+
+前一卷摘要（衔接用）：
+{{prevVolumeSummary}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+{{#if worldRulesContext}}
+
+{{worldRulesContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}
+
+**【铁律·必须严格遵守】**
+1. 只展开【本卷】：所有章节必须严格围绕上面的「卷情节摘要」推进，本卷结束时的剧情进度应恰好停在该摘要描述的终点。绝不能把后续卷的情节提前写出来，更不能在这一卷里就把整本书的故事讲完。
+2. 每一章都要落在「卷情节摘要」的范围之内、与摘要内容相符；把本卷情节均匀拆分到各章，每章只推进一小步，保持合理节奏，不要几章就把本卷讲完。{{#if usesChaptersPerVolume}}
+3. 章节数量：必须输出恰好 {{chaptersPerVolume}} 章，不多不少。若卷情节摘要中提到的章节数与此处不一致，一律以此处设定的 {{chaptersPerVolume}} 章为准。{{/if}}{{#if notUsesChaptersPerVolume}}
+3. 章节数量：约 15-25 章。{{/if}}
+
+**输出格式**：请严格输出 JSON 数组，用 JSON 代码块包裹{{#if usesChaptersPerVolume}}（数组长度必须恰好为 {{chaptersPerVolume}}）{{/if}}，每个元素包含 title（章节标题，如"第1章：XXX"）和 summary（1-2 句情节摘要）。示例：
+[{"title":"第1章：初入江湖","summary":"..."},{"title":"第2章：暗潮涌动","summary":"..."}]
+不要输出 JSON 以外的任何文字。{{#if userHint}}
+
+用户补充要求：{{userHint}}{{/if}}`,
+    variables: ['volumeTitle', 'volumeSummary', 'projectName', 'genres', 'worldContext', 'prevVolumeSummary', 'characterContext', 'worldRulesContext', 'userHint'],
+    parameters: [
+      { key: 'pace', label: '节奏', type: 'select',
+        options: ['慢', '中', '快', '极快'], default: '中', optional: true },
+      { key: 'chaptersPerVolume', label: '本卷章节数', type: 'slider',
+        min: 1, max: 1000, step: 1, default: 20, optional: true },
+    ],
+    isActive: false,
+  },
+  {
+    scope: 'system',
+    moduleKey: 'outline.chapter',
+    promptType: 'generate',
+    name: '现实主义包-章节大纲',
+    description: '现实题材章节大纲。生活切片、心理写实、不回避琐碎。',
+    genres: ['realism'],
+    systemPrompt: `你是一位精于现实题材的章节大纲师。每章抓一段生活切片（一次对话、一次加班、一次家人争吵、一次独处），不靠事件密度驱动，靠心理细节。
+
+现实章节节奏要点：
+1. 章首进入具体场景（地点+时间+人物动作），不要抽象交代
+2. 章中至少有 1-2 段具象细节（具体动作/具体物件/具体台词），避免概括性叙述
+3. 章末留一个未解的小问题或一个日常余味（明天会怎样 / 这个决定会如何 / 这顿饭吃得怎么样）
+4. 不要塞入爽点/反转；生活本身的不圆满就是节拍
+5. 章数严格遵循 {{chaptersPerVolume}} 或 15-25 章，不要超出`,
+    userPromptTemplate: `请将下面这一卷展开为章节大纲。
+
+卷标题：{{volumeTitle}}
+卷情节摘要：{{volumeSummary}}
+
+小说类型：{{genres}}
+小说名称：{{projectName}}
+
+世界观摘要：
+{{worldContext}}
+
+前一卷摘要（衔接用）：
+{{prevVolumeSummary}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+{{#if worldRulesContext}}
+
+{{worldRulesContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}
+
+**【铁律·必须严格遵守】**
+1. 只展开【本卷】：所有章节必须严格围绕上面的「卷情节摘要」推进，本卷结束时的剧情进度应恰好停在该摘要描述的终点。绝不能把后续卷的情节提前写出来，更不能在这一卷里就把整本书的故事讲完。
+2. 每一章都要落在「卷情节摘要」的范围之内、与摘要内容相符；把本卷情节均匀拆分到各章，每章只推进一小步，保持合理节奏，不要几章就把本卷讲完。{{#if usesChaptersPerVolume}}
+3. 章节数量：必须输出恰好 {{chaptersPerVolume}} 章，不多不少。若卷情节摘要中提到的章节数与此处不一致，一律以此处设定的 {{chaptersPerVolume}} 章为准。{{/if}}{{#if notUsesChaptersPerVolume}}
+3. 章节数量：约 15-25 章。{{/if}}
+
+**输出格式**：请严格输出 JSON 数组，用 JSON 代码块包裹{{#if usesChaptersPerVolume}}（数组长度必须恰好为 {{chaptersPerVolume}}）{{/if}}，每个元素包含 title（章节标题，如"第1章：XXX"）和 summary（1-2 句情节摘要）。示例：
+[{"title":"第1章：初入江湖","summary":"..."},{"title":"第2章：暗潮涌动","summary":"..."}]
+不要输出 JSON 以外的任何文字。{{#if userHint}}
+
+用户补充要求：{{userHint}}{{/if}}`,
+    variables: ['volumeTitle', 'volumeSummary', 'projectName', 'genres', 'worldContext', 'prevVolumeSummary', 'characterContext', 'worldRulesContext', 'userHint'],
+    parameters: [
+      { key: 'pace', label: '节奏', type: 'select',
+        options: ['慢', '中', '快', '极快'], default: '中', optional: true },
+      { key: 'chaptersPerVolume', label: '本卷章节数', type: 'slider',
+        min: 1, max: 1000, step: 1, default: 20, optional: true },
+    ],
+    isActive: false,
+  },
+  {
+    scope: 'system',
+    moduleKey: 'outline.chapter',
+    promptType: 'generate',
+    name: '悬疑推理包-章节大纲',
+    description: '悬疑题材章节大纲。每章丢新线索/反转,信息控制严格。',
+    genres: ['suspense'],
+    systemPrompt: `你是一位精于悬疑推理的章节大纲师。每章贡献一条新线索、一个新疑问、一次视角错位，或一次小反转；信息控制严格，读者必须比主角晚一步或多步获得关键信息。
+
+悬疑章节节奏要点：
+1. 章首直接进入新事件/新证据/新人物登场，不要回顾上章
+2. 章中至少有 1 个细节是「误导」或「伏笔」（要在 summary 里点明这是误导还是伏笔）
+3. 章末必须留一个未解的小谜团（一个证词、一个不在场证明、一个异常的细节）
+4. 主角的推理/判断可以错，但不能无脑错；错误必须有合理依据
+5. 章数严格遵循 {{chaptersPerVolume}} 或 15-25 章，不要超出`,
+    userPromptTemplate: `请将下面这一卷展开为章节大纲。
+
+卷标题：{{volumeTitle}}
+卷情节摘要：{{volumeSummary}}
+
+小说类型：{{genres}}
+小说名称：{{projectName}}
+
+世界观摘要：
+{{worldContext}}
+
+前一卷摘要（衔接用）：
+{{prevVolumeSummary}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+{{#if worldRulesContext}}
+
+{{worldRulesContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}
+
+**【铁律·必须严格遵守】**
+1. 只展开【本卷】：所有章节必须严格围绕上面的「卷情节摘要」推进，本卷结束时的剧情进度应恰好停在该摘要描述的终点。绝不能把后续卷的情节提前写出来，更不能在这一卷里就把整本书的故事讲完。
+2. 每一章都要落在「卷情节摘要」的范围之内、与摘要内容相符；把本卷情节均匀拆分到各章，每章只推进一小步，保持合理节奏，不要几章就把本卷讲完。{{#if usesChaptersPerVolume}}
+3. 章节数量：必须输出恰好 {{chaptersPerVolume}} 章，不多不少。若卷情节摘要中提到的章节数与此处不一致，一律以此处设定的 {{chaptersPerVolume}} 章为准。{{/if}}{{#if notUsesChaptersPerVolume}}
+3. 章节数量：约 15-25 章。{{/if}}
+
+**输出格式**：请严格输出 JSON 数组，用 JSON 代码块包裹{{#if usesChaptersPerVolume}}（数组长度必须恰好为 {{chaptersPerVolume}}）{{/if}}，每个元素包含 title（章节标题，如"第1章：XXX"）和 summary（1-2 句情节摘要）。示例：
+[{"title":"第1章：初入江湖","summary":"..."},{"title":"第2章：暗潮涌动","summary":"..."}]
+不要输出 JSON 以外的任何文字。{{#if userHint}}
+
+用户补充要求：{{userHint}}{{/if}}`,
+    variables: ['volumeTitle', 'volumeSummary', 'projectName', 'genres', 'worldContext', 'prevVolumeSummary', 'characterContext', 'worldRulesContext', 'userHint'],
+    parameters: [
+      { key: 'pace', label: '节奏', type: 'select',
+        options: ['慢', '中', '快', '极快'], default: '中', optional: true },
+      { key: 'chaptersPerVolume', label: '本卷章节数', type: 'slider',
+        min: 1, max: 1000, step: 1, default: 20, optional: true },
+    ],
+    isActive: false,
+  },
+  {
+    scope: 'system',
+    moduleKey: 'outline.chapter',
+    promptType: 'generate',
+    name: '历史包-章节大纲',
+    description: '历史题材章节大纲。朝堂/民间/战场多线,史实风险标注。',
+    genres: ['lishi'],
+    systemPrompt: `你是一位精于历史小说的章节大纲师。每章承担朝堂/民间/战场/密室四线中的一条推进，避免把多线冲突塞进一章。
+
+历史章节节奏要点：
+1. 章首直接进入该线场景（朝会议事 / 民间市井 / 行军调度 / 密室密谋）
+2. 章中至少一个时代细节（具体官职、具体礼节、具体地名、具体器物）—— 不能出现穿越式现代词汇
+3. 章末留一个权谋钩子（一道未批的奏折、一封未送出的信、一个未揭的阴谋）
+4. 涉及真实历史人物/事件时，summary 末尾加 ⚠️ 史实待核实 提示；纯虚构人物无需标
+5. 章数严格遵循 {{chaptersPerVolume}} 或 15-25 章，不要超出`,
+    userPromptTemplate: `请将下面这一卷展开为章节大纲。
+
+卷标题：{{volumeTitle}}
+卷情节摘要：{{volumeSummary}}
+
+小说类型：{{genres}}
+小说名称：{{projectName}}
+
+世界观摘要：
+{{worldContext}}
+
+前一卷摘要（衔接用）：
+{{prevVolumeSummary}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+{{#if worldRulesContext}}
+
+{{worldRulesContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}
+
+**【铁律·必须严格遵守】**
+1. 只展开【本卷】：所有章节必须严格围绕上面的「卷情节摘要」推进，本卷结束时的剧情进度应恰好停在该摘要描述的终点。绝不能把后续卷的情节提前写出来，更不能在这一卷里就把整本书的故事讲完。
+2. 每一章都要落在「卷情节摘要」的范围之内、与摘要内容相符；把本卷情节均匀拆分到各章，每章只推进一小步，保持合理节奏，不要几章就把本卷讲完。{{#if usesChaptersPerVolume}}
+3. 章节数量：必须输出恰好 {{chaptersPerVolume}} 章，不多不少。若卷情节摘要中提到的章节数与此处不一致，一律以此处设定的 {{chaptersPerVolume}} 章为准。{{/if}}{{#if notUsesChaptersPerVolume}}
+3. 章节数量：约 15-25 章。{{/if}}
+
+**输出格式**：请严格输出 JSON 数组，用 JSON 代码块包裹{{#if usesChaptersPerVolume}}（数组长度必须恰好为 {{chaptersPerVolume}}）{{/if}}，每个元素包含 title（章节标题，如"第1章：XXX"）和 summary（1-2 句情节摘要）。示例：
+[{"title":"第1章：初入江湖","summary":"..."},{"title":"第2章：暗潮涌动","summary":"..."}]
+不要输出 JSON 以外的任何文字。{{#if userHint}}
+
+用户补充要求：{{userHint}}{{/if}}`,
+    variables: ['volumeTitle', 'volumeSummary', 'projectName', 'genres', 'worldContext', 'prevVolumeSummary', 'characterContext', 'worldRulesContext', 'userHint'],
+    parameters: [
+      { key: 'pace', label: '节奏', type: 'select',
+        options: ['慢', '中', '快', '极快'], default: '中', optional: true },
+      { key: 'chaptersPerVolume', label: '本卷章节数', type: 'slider',
+        min: 1, max: 1000, step: 1, default: 20, optional: true },
+    ],
+    isActive: false,
+  }
 ]
 
 // ── 言情包 ─────────────────────────────────────────────────────────────────
@@ -272,8 +575,14 @@ const YANQING: PromptSeed[] = [
 
 请生成言情卷级大纲。{{#if userHint}}
 
-用户补充：{{userHint}}{{/if}}`,
-    variables: ['projectName', 'targetWordCount', 'worldContext', 'storyCore', 'userHint'],
+用户补充：{{userHint}}{{/if}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}`,
+    variables: ['projectName', 'targetWordCount', 'worldContext', 'storyCore', 'characterContext', 'userHint'],
     isActive: false,
   },
   {
@@ -447,8 +756,14 @@ const REALISM: PromptSeed[] = [
 
 请生成现实主义卷级大纲。{{#if userHint}}
 
-用户补充：{{userHint}}{{/if}}`,
-    variables: ['projectName', 'targetWordCount', 'worldContext', 'storyCore', 'userHint'],
+用户补充：{{userHint}}{{/if}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}`,
+    variables: ['projectName', 'targetWordCount', 'worldContext', 'storyCore', 'characterContext', 'userHint'],
     isActive: false,
   },
   {
@@ -627,8 +942,14 @@ const SUSPENSE: PromptSeed[] = [
 
 请生成悬疑推理卷级大纲。{{#if userHint}}
 
-用户补充：{{userHint}}{{/if}}`,
-    variables: ['projectName', 'targetWordCount', 'worldContext', 'storyCore', 'userHint'],
+用户补充：{{userHint}}{{/if}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}`,
+    variables: ['projectName', 'targetWordCount', 'worldContext', 'storyCore', 'characterContext', 'userHint'],
     isActive: false,
   },
   {
@@ -840,8 +1161,14 @@ const HISTORICAL: PromptSeed[] = [
 
 请按历史小说节奏生成卷级大纲，每卷围绕一次核心政治博弈或历史转折。{{#if userHint}}
 
-用户补充：{{userHint}}{{/if}}`,
-    variables: ['projectName', 'targetWordCount', 'estimatedVolumes', 'worldContext', 'storyCore', 'userHint'],
+用户补充：{{userHint}}{{/if}}
+{{#if characterContext}}
+已创建的角色：
+{{characterContext}}
+{{/if}}
+
+{{OUTLINE_CHARACTER_BINDING}}`,
+    variables: ['projectName', 'targetWordCount', 'estimatedVolumes', 'worldContext', 'storyCore', 'characterContext', 'userHint'],
     isActive: false,
   },
   {

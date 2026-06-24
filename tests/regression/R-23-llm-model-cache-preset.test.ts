@@ -196,4 +196,50 @@ describe('R-23: LLM 模型列表缓存 + 域名提取', () => {
       expect(src).toMatch(/onClick=\{handleSaveNewPreset\}/)
     })
   })
+
+  // R-23.1: B 方案 + E 按钮(模型列表显示)
+  describe('R-23.1: datalist 旧值保留 + 显示全部按钮', () => {
+    it('B 方案:useEffect 拉取成功时把当前 model 放到列表首位', async () => {
+      const fs = await import('node:fs/promises')
+      const src = await fs.readFile(
+        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        'utf8',
+      )
+      // 关键代码片段:cur && !models.includes(cur) ? [cur, ...models] : models
+      expect(src).toMatch(/cur && !models\.includes\(cur\)/)
+    })
+
+    it('E 方案:modelInputRef 已声明并绑定到 input', async () => {
+      const fs = await import('node:fs/promises')
+      const src = await fs.readFile(
+        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        'utf8',
+      )
+      expect(src).toMatch(/const modelInputRef = useRef<HTMLInputElement>\(null\)/)
+      expect(src).toMatch(/ref=\{modelInputRef\}/)
+    })
+
+    it('E 方案:handleShowAllModels 清空 input + focus', async () => {
+      const fs = await import('node:fs/promises')
+      const src = await fs.readFile(
+        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        'utf8',
+      )
+      expect(src).toMatch(/handleShowAllModels/)
+      expect(src).toMatch(/modelInputRef\.current\.value = ''/)
+      expect(src).toMatch(/setConfig\(\{ model: '' \}\)/)
+      expect(src).toMatch(/modelInputRef\.current\.focus\(\)/)
+    })
+
+    it('E 方案:模型输入框旁有 ▼ 按钮 onClick=handleShowAllModels', async () => {
+      const fs = await import('node:fs/promises')
+      const src = await fs.readFile(
+        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        'utf8',
+      )
+      expect(src).toMatch(/onClick=\{handleShowAllModels\}/)
+      // 按钮文字是 ▼
+      expect(src).toMatch(/>\s*▼\s*</)
+    })
+  })
 })

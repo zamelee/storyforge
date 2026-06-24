@@ -65,6 +65,7 @@ export default function AIConfigPanel() {
   const [modelsFromCache, setModelsFromCache] = useState(false)
   const [modelsError, setModelsError] = useState<string | null>(null)
   const modelsCacheKey = useRef('')
+  const modelInputRef = useRef<HTMLInputElement>(null)
 
   const handleSavePreset = () => {
     if (!presetName.trim()) return
@@ -136,7 +137,10 @@ export default function AIConfigPanel() {
     void loadModels(config.provider, config.baseUrl, config.apiKey, false)
       .then(({ models, fromCache }) => {
         if (modelsCacheKey.current === key) {
-          setModels(models)
+          // B 方案:当前 model 不在列表里时加到首位,确保旧值仍可见可点回
+          const cur = config.model
+          const next = cur && !models.includes(cur) ? [cur, ...models] : models
+          setModels(next)
           setModelsFromCache(fromCache)
         }
       })
@@ -164,6 +168,15 @@ export default function AIConfigPanel() {
       if (modelsCacheKey.current === key) setModelsError((e as Error).message)
     } finally {
       if (modelsCacheKey.current === key) setLoadingModels(false)
+    }
+  }
+
+  // R-23: 临时清空 model 输入框,触发 datalist 显示全部 option(H5 datalist 在 input 有值时只过滤匹配)
+  const handleShowAllModels = () => {
+    if (modelInputRef.current) {
+      modelInputRef.current.value = ''
+      setConfig({ model: '' })
+      modelInputRef.current.focus()
     }
   }
 
@@ -402,6 +415,7 @@ export default function AIConfigPanel() {
               {/* R-23: 模型选择 — datalist(可输入可选择)+ 🔄 拉取/刷新 */}
               <div className="flex gap-1.5">
                 <input
+                  ref={modelInputRef}
                   type="text"
                   list={`models-datalist-${config.provider}`}
                   value={config.model}
@@ -409,6 +423,15 @@ export default function AIConfigPanel() {
                   placeholder={loadingModels ? '加载模型列表中...' : models.length > 0 ? '选择或输入模型名' : '输入模型名,或点 🔄 拉取'}
                   className="flex-1 px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
                 />
+                <button
+                  type="button"
+                  onClick={handleShowAllModels}
+                  disabled={models.length === 0}
+                  title="临时清空输入,显示 datalist 全部模型"
+                  className="px-2.5 py-2 bg-bg-base border border-border rounded-lg text-text-secondary hover:text-accent hover:border-accent/50 transition-colors disabled:opacity-40"
+                >
+                  ▼
+                </button>
                 <button
                   type="button"
                   onClick={handleRefreshModels}

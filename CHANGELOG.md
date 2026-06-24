@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased �� 2026-06-24 �� R-22 ��ɫ��������(�½�/ϸ��/����)
+
+- �½ڡ�ϸ�١�����ϸ�١�����ϸ������ǿϸ�� 5 �� LLM ���ȫ���󶨵���Ŀ��ɫ��,LLM ���޷�"ƾ�ձ�����"(`������/������/�����` ���ֿ���û�еĽ�ɫ������ʧ)��
+- `assemble-context.ts` ��ɫ�α� trim ʱ,CORE �����±�����������(`extractCharacterNames` ɨ 4 �� buildCharacterContext �����ʽ),���ɲ����ֲ�����
+- `DetailedOutlinePanel.tsx` ������д��ɫ��(`characters.filter(main)`)��Ϊ�� `assembled.segments[characters]`,��Ϊ�����/�����߶��롣
+- `prompt-seeds.ts` �½� SYSTEM ��"ƪ������"(�û�ָ������ʱ���ı���ﵽ ��10%),user ģ��ĩβ׷��"��д��Ŀ������"��
+- ���� `tests/regression/R-22-chapter-character-binding.test.ts` 4 ���ع�������tsc 0 errors �� vitest 300/300 �� LLM ʵ����� 2670/2500 �֡�
+- ��ϸ��¼: `docs/refactor/R-22-character-binding.md`��
+
+
 ## Unreleased — 2026-06-18 · R1 角色设计双轴重构
 
 - 角色模型拆分为四档戏份权重与 DnD 九宫格阵营；“主要反派”“中立主要角色”等组合可直接表达。

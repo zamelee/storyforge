@@ -139,12 +139,12 @@ export default function AIConfigPanel() {
 
           {/* "已修改未关联" 提示行:activePresetId=null 时(改动后跟任何预设都不一致),提示用户保存 */}
           {activePresetId === null && lastSelectedPresetId && (
-            <div className="mb-2 px-2 py-1.5 text-[11px] rounded border border-amber-500/30 bg-amber-500/10 text-amber-300 flex items-center gap-2 flex-wrap">
+            <div className="mb-2 px-2 py-1.5 text-[11px] rounded border border-warning/30 bg-warning/15 text-warning flex items-center gap-2 flex-wrap">
               <span>⚠️ 已修改(未关联预设)</span>
               {presets.find(x => x.id === lastSelectedPresetId) && (
                 <button
                   onClick={() => updatePresetFromCurrent(lastSelectedPresetId!)}
-                  className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200"
+                  className="px-1.5 py-0.5 rounded bg-warning/20 hover:bg-warning/30 text-warning font-medium"
                   title={`保存到「${presets.find(x => x.id === lastSelectedPresetId)?.name}」`}
                 >
                   💾 保存到「{presets.find(x => x.id === lastSelectedPresetId)?.name}」
@@ -152,7 +152,7 @@ export default function AIConfigPanel() {
               )}
               <button
                 onClick={() => setSavingPreset(true)}
-                className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200"
+                className="px-1.5 py-0.5 rounded bg-warning/20 hover:bg-warning/30 text-warning font-medium"
                 title="另存为新预设"
               >
                 📋 另存为新预设
@@ -160,7 +160,7 @@ export default function AIConfigPanel() {
               {presets.find(x => x.id === lastSelectedPresetId) && (
                 <button
                   onClick={resetToLastSelectedPreset}
-                  className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200"
+                  className="px-1.5 py-0.5 rounded bg-warning/20 hover:bg-warning/30 text-warning font-medium"
                   title={`放弃改动,回到「${presets.find(x => x.id === lastSelectedPresetId)?.name}」`}
                 >
                   ↺ 放弃改动

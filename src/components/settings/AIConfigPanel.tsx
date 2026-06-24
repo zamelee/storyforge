@@ -1,10 +1,11 @@
-import { useState, useEffect, useSyncExternalStore } from 'react'
+import { useState, useEffect, useSyncExternalStore, useRef } from 'react'
 import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import { useLLMMonitorStore } from '../../lib/debug/store'
 import type { AIProvider } from '../../lib/types'
 import { PROVIDER_MODELS } from '../../lib/types'
 import { getLogs, subscribeLogs, clearLogs, formatLog } from '../../lib/ai/logger'
+import { loadModels, suggestPresetNameFromBaseUrl } from '../../lib/ai/llm-model-cache'
 import { useDialog } from '../shared/Dialog'
 
 const PROVIDER_OPTIONS: { value: AIProvider; label: string; cors: boolean; hint: string }[] = [
@@ -47,12 +48,36 @@ export default function AIConfigPanel() {
   const [showLogs, setShowLogs] = useState(false)
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
+  // R-23: 新建空白预设(B-1:从零建)
+  const [creatingNew, setCreatingNew] = useState(false)
+  const [newPreset, setNewPreset] = useState({
+    name: '',
+    provider: 'custom' as import('../../lib/types').AIProvider,
+    apiKey: '',
+    model: '',
+    baseUrl: 'https://',
+    temperature: 0.7,
+    maxTokens: 0,
+  })
+  // R-23: 模型选择 — datalist 列表 + 拉取/缓存
+  const [models, setModels] = useState<string[]>([])
+  const [loadingModels, setLoadingModels] = useState(false)
+  const [modelsFromCache, setModelsFromCache] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+  const modelsCacheKey = useRef('')
 
   const handleSavePreset = () => {
     if (!presetName.trim()) return
     saveAsPreset(presetName.trim())
     setPresetName('')
     setSavingPreset(false)
+  }
+
+  // 点 "保存当前为预设" 时,默认填入 baseUrl 域名(可改)
+  const openSavePreset = () => {
+    const suggested = suggestPresetNameFromBaseUrl(config.baseUrl)
+    setPresetName(suggested)
+    setSavingPreset(true)
   }
 
   // 订阅日志变化
@@ -99,6 +124,61 @@ export default function AIConfigPanel() {
     setTestResult(null)
   }, [config.provider])
 
+  // R-23: 拉取模型列表(provider + baseUrl 变化时,从 cache 读;miss 才调 /models)
+  useEffect(() => {
+    const key = `${config.provider}::${config.baseUrl}`
+    if (key === modelsCacheKey.current) return
+    modelsCacheKey.current = key
+    setModels([])
+    setModelsError(null)
+    if (!config.baseUrl || !config.baseUrl.startsWith('http')) return
+    setLoadingModels(true)
+    void loadModels(config.provider, config.baseUrl, config.apiKey, false)
+      .then(({ models, fromCache }) => {
+        if (modelsCacheKey.current === key) {
+          setModels(models)
+          setModelsFromCache(fromCache)
+        }
+      })
+      .catch((e: Error) => {
+        if (modelsCacheKey.current === key) setModelsError(e.message)
+      })
+      .finally(() => {
+        if (modelsCacheKey.current === key) setLoadingModels(false)
+      })
+  }, [config.provider, config.baseUrl, config.apiKey])
+
+  // R-23: 用户主动点 🔄 强制刷新
+  const handleRefreshModels = async () => {
+    if (!config.baseUrl || !config.baseUrl.startsWith('http')) return
+    const key = `${config.provider}::${config.baseUrl}`
+    setLoadingModels(true)
+    setModelsError(null)
+    try {
+      const { models } = await loadModels(config.provider, config.baseUrl, config.apiKey, true)
+      if (modelsCacheKey.current === key) {
+        setModels(models)
+        setModelsFromCache(false)
+      }
+    } catch (e) {
+      if (modelsCacheKey.current === key) setModelsError((e as Error).message)
+    } finally {
+      if (modelsCacheKey.current === key) setLoadingModels(false)
+    }
+  }
+
+  // R-23: 保存新建预设(B-1:从零建,先把 newPreset 临时应用,saveAsPreset,再还原)
+  const handleSaveNewPreset = () => {
+    if (!newPreset.name.trim()) return
+    const orig = { ...config }
+    setConfig(newPreset)
+    const id = saveAsPreset(newPreset.name.trim())
+    setConfig(orig)
+    setCreatingNew(false)
+    setNewPreset({ name: '', provider: 'custom', apiKey: '', model: '', baseUrl: 'https://', temperature: 0.7, maxTokens: 0 })
+    if (id) applyPreset(id)
+  }
+
   return (
     <div className="max-w-2xl">
       <h2 className="text-xl font-bold text-text-primary mb-6">设置</h2>
@@ -128,12 +208,20 @@ export default function AIConfigPanel() {
                 <button onClick={() => setSavingPreset(false)} className="px-2 py-1 text-xs text-text-muted hover:text-text-primary">取消</button>
               </div>
             ) : (
-              <button
-                onClick={() => setSavingPreset(true)}
-                className="text-xs px-2.5 py-1 rounded-lg bg-bg-elevated text-text-secondary border border-border hover:text-accent hover:border-accent/50 transition-colors"
-              >
-                ＋ 保存当前为预设
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={openSavePreset}
+                  className="text-xs px-2.5 py-1 rounded-lg bg-bg-elevated text-text-secondary border border-border hover:text-accent hover:border-accent/50 transition-colors"
+                >
+                  ＋ 保存当前为预设
+                </button>
+                <button
+                  onClick={() => setCreatingNew(true)}
+                  className="text-xs px-2.5 py-1 rounded-lg bg-bg-elevated text-text-secondary border border-border hover:text-accent hover:border-accent/50 transition-colors"
+                >
+                  ＋ 新建(空白)
+                </button>
+              </div>
             )}
           </div>
 
@@ -311,42 +399,44 @@ export default function AIConfigPanel() {
             </div>
             <div>
               <label className="block text-sm text-text-secondary mb-1.5">模型</label>
-              {PROVIDER_MODELS[config.provider] ? (
-                <>
-                  <select
-                    value={config.model}
-                    onChange={(e) => setConfig({ model: e.target.value })}
-                    className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
-                  >
-                    {PROVIDER_MODELS[config.provider].map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.value}
-                      </option>
-                    ))}
-                  </select>
-                  {(() => {
-                    const selected = PROVIDER_MODELS[config.provider]?.find((m) => m.value === config.model)
-                    return selected?.desc ? (
-                      <p className="mt-1 text-xs text-text-muted">{selected.desc}</p>
-                    ) : null
-                  })()}
-                  {/* 自定义模型名：列表里没有的模型可手动输入 */}
-                  <input
-                    type="text"
-                    value={config.model}
-                    onChange={(e) => setConfig({ model: e.target.value })}
-                    placeholder="或手动输入模型名（列表中没有的型号）"
-                    className="mt-1.5 w-full px-3 py-1.5 bg-bg-base border border-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-accent transition-colors"
-                  />
-                </>
-              ) : (
+              {/* R-23: 模型选择 — datalist(可输入可选择)+ 🔄 拉取/刷新 */}
+              <div className="flex gap-1.5">
                 <input
                   type="text"
+                  list={`models-datalist-${config.provider}`}
                   value={config.model}
                   onChange={(e) => setConfig({ model: e.target.value })}
-                  className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
+                  placeholder={loadingModels ? '加载模型列表中...' : models.length > 0 ? '选择或输入模型名' : '输入模型名,或点 🔄 拉取'}
+                  className="flex-1 px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
                 />
-              )}
+                <button
+                  type="button"
+                  onClick={handleRefreshModels}
+                  disabled={loadingModels || !config.baseUrl?.startsWith('http')}
+                  title={loadingModels ? '加载中...' : '点击重新从服务端拉取模型列表(覆盖缓存)'}
+                  className="px-2.5 py-2 bg-bg-base border border-border rounded-lg text-text-secondary hover:text-accent hover:border-accent/50 transition-colors disabled:opacity-40"
+                >
+                  {loadingModels ? '⏳' : '🔄'}
+                </button>
+              </div>
+              <datalist id={`models-datalist-${config.provider}`}>
+                {models.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+              {(() => {
+                const selected = PROVIDER_MODELS[config.provider]?.find((m) => m.value === config.model)
+                return selected?.desc ? (
+                  <p className="mt-1 text-xs text-text-muted">{selected.desc}</p>
+                ) : null
+              })()}
+              <p className="mt-1 text-xs text-text-muted">
+                {loadingModels && '⏳ 拉取模型列表...'}
+                {!loadingModels && modelsError && <span className="text-error">❌ 拉取失败:{modelsError}(手动输入即可)</span>}
+                {!loadingModels && !modelsError && models.length > 0 && (
+                  <>{modelsFromCache ? '📦 缓存 ' : '🌐 已拉取 '}{models.length} 个模型</>
+                )}
+              </p>
             </div>
           </div>
 
@@ -576,6 +666,101 @@ export default function AIConfigPanel() {
               </button>
             )
           })}
+﻿
+      {/* R-23: 新建(空白)预设 Dialog */}
+      {creatingNew && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50">
+          <div className="bg-bg-surface border border-border rounded-xl p-5 w-[min(90vw,500px)] max-h-[80vh] overflow-y-auto">
+            <h3 className="text-base font-semibold text-text-primary mb-4">新建预设(从零)</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">预设名称 *</label>
+                <input
+                  value={newPreset.name}
+                  onChange={e => setNewPreset({ ...newPreset, name: e.target.value })}
+                  placeholder="如「我的新预设」"
+                  className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">提供商</label>
+                <select
+                  value={newPreset.provider}
+                  onChange={e => setNewPreset({ ...newPreset, provider: e.target.value as AIProvider })}
+                  className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm"
+                >
+                  {PROVIDER_OPTIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">API Key</label>
+                <input
+                  type="password"
+                  value={newPreset.apiKey}
+                  onChange={e => setNewPreset({ ...newPreset, apiKey: e.target.value })}
+                  className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">Base URL</label>
+                <input
+                  value={newPreset.baseUrl}
+                  onChange={e => setNewPreset({ ...newPreset, baseUrl: e.target.value })}
+                  className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">模型</label>
+                <input
+                  value={newPreset.model}
+                  onChange={e => setNewPreset({ ...newPreset, model: e.target.value })}
+                  className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm text-text-secondary mb-1">Temperature</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="2"
+                    value={newPreset.temperature}
+                    onChange={e => setNewPreset({ ...newPreset, temperature: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-text-secondary mb-1">Max Tokens (0=不限)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={newPreset.maxTokens}
+                    onChange={e => setNewPreset({ ...newPreset, maxTokens: Number(e.target.value) })}
+                    className="w-full px-3 py-2 bg-bg-base border border-border rounded-lg text-text-primary text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button
+                onClick={() => setCreatingNew(false)}
+                className="px-3 py-1.5 text-sm text-text-muted hover:text-text-primary"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleSaveNewPreset}
+                disabled={!newPreset.name.trim()}
+                className="px-3 py-1.5 text-sm bg-accent text-white rounded hover:bg-accent-hover disabled:opacity-40"
+              >
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
         </div>
       </div>
     </div>

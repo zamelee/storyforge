@@ -107,9 +107,9 @@ export interface ExportRefRemap {
 /**
  * 单张表的元信息。
  */
-export interface TableSpec<T = any> {
+export interface TableSpec<T = any, TKey = number> {
   /** Dexie 表对象(可直接操作) */
-  table: Table<T, number>
+  table: Table<T, TKey>
   /** 表名(与 db 实例属性名一致) */
   name: string
   /** 归属方式 */

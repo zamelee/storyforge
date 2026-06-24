@@ -39,6 +39,20 @@ export interface AIConfigPreset {
   config: AIConfig
 }
 
+/**
+ * R-23: LLM 模型列表缓存
+ * 拉取 {baseUrl}/models 后存到这里,下次打开直接读缓存。
+ * 只有用户主动点 🔄 刷新时才重新拉取(永不过期)。
+ * id 用 provider + baseUrl 做 key。
+ */
+export interface LLMModelCacheEntry {
+  id: string                    // `${provider}::${baseUrl}`
+  provider: AIProvider
+  baseUrl: string
+  models: string[]
+  fetchedAt: number             // Date.now()
+}
+
 /** 聊天消息 */
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'

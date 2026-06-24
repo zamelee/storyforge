@@ -40,6 +40,7 @@ import type {
   StoryTimelineEvent,
   CodexCategory,
   CodexEntry,
+  LLMModelCacheEntry,
 } from '../types'
 import type { AIUsageEntry } from '../ai/usage-log'
 
@@ -74,6 +75,9 @@ class StoryForgeDB extends Dexie {
 
   // A3 —— 情感节拍卡
   emotionBeatCards!: Table<EmotionBeatCard, number>
+
+  // R-23 —— LLM 模型列表缓存(provider + baseUrl → models[])
+  llmModelCache!: Table<LLMModelCacheEntry, string>
 
   // Phase B — 全局故事线
   storyArcs!: Table<StoryArc, number>
@@ -326,6 +330,11 @@ class StoryForgeDB extends Dexie {
       characters: '++id, projectId, name, role, roleWeight, moralAxis, orderAxis',
     }).upgrade(async (tx) => {
       await migrateCharactersToAxes(tx)
+    })
+
+    // R-23 —— LLM 模型列表缓存表(主键是 string id = provider::baseUrl)
+    this.version(34).stores({
+      llmModelCache: 'id, provider, baseUrl, fetchedAt',
     })
   }
 }

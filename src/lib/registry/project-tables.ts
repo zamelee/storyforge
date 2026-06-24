@@ -10,6 +10,7 @@
  * 设计依据:docs/MASTER-BLUEPRINT.md §5.1
  */
 import { db } from '../db/schema'
+import type { Table } from 'dexie'
 import type { TableSpec } from './types'
 
 export const PROJECT_TABLES: TableSpec[] = [
@@ -208,6 +209,10 @@ export const PROJECT_TABLES: TableSpec[] = [
     note: '全局 scope=system|user' },
 
   { table: db.promptWorkflows, name: 'promptWorkflows', owner: 'global', exportable: false },
+
+  // R-23: LLM /models 响应缓存(全局用户级,不绑项目;主键 = string)
+  { table: db.llmModelCache as unknown as Table<any, number>, name: 'llmModelCache', owner: 'global', exportable: false,
+    note: '/models API 响应缓存;主键 = provider::baseUrl;用户级不导出' },
 
   { table: db.aiUsageLog, name: 'aiUsageLog', owner: 'project', exportable: false,
     note: '消耗统计;projectId 可空;体积大不导出' },

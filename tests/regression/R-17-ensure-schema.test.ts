@@ -32,7 +32,7 @@ describe('R-17: ensureSchema 生产环境不自动删库', () => {
     const schemaTables = db.tables.map(table => table.name).sort()
     const requiredTables = [...REQUIRED_TABLES].sort()
 
-    expect(requiredTables).toHaveLength(39)   // v29 删 itemSystems/factions:45→43;FB-5 加 userStyleProfiles:43→44;v32 删 5 张 master 表:44→39
+    expect(requiredTables).toHaveLength(40)   // v29 删 itemSystems/factions:45→43;FB-5 加 userStyleProfiles:43→44;v32 删 5 张 master 表:44→39;R-23 加 llmModelCache:39→40(用户级缓存,不是 project 表)
     expect(requiredTables).toEqual(schemaTables)
   })
 

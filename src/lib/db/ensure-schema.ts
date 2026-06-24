@@ -21,6 +21,7 @@ export const REQUIRED_TABLES = [
   'importSessions',
   'importantLocations',
   'itemLedger',
+  'llmModelCache',
   'notes',
   'outlineNodes',
   'powerSystems',

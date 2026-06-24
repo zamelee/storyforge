@@ -42,6 +42,8 @@ export function installLLMMonitor(): void {
   }
   const root = createRoot(rootEl)
   window.__llmMonitorRoot = root
+  // 暴露 store 到 window,方便浏览器 console 调试
+  void import('./store').then((m) => { (window as any).__llmMonitorStore = m.useLLMMonitorStore })
   root.render(createElement(LLMMonitorMount))
 }
 

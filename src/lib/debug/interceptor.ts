@@ -18,9 +18,9 @@ export function installFetchInterceptor(): () => void {
   if (typeof window === 'undefined') return () => {}
   const originalFetch = window.fetch.bind(window)
 
-  const w = window as unknown as { __llmMonitorInstalled?: boolean }
-  if (w.__llmMonitorInstalled) return () => {}
-  w.__llmMonitorInstalled = true
+  const w = window as unknown as { __llmMonitorFetchInstalled?: boolean }
+  if (w.__llmMonitorFetchInstalled) return () => {}
+  w.__llmMonitorFetchInstalled = true
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url =
@@ -139,7 +139,7 @@ export function installFetchInterceptor(): () => void {
 
   return () => {
     window.fetch = originalFetch
-    w.__llmMonitorInstalled = false
+    w.__llmMonitorFetchInstalled = false
   }
 }
 

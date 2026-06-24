@@ -127,6 +127,7 @@ function trimToFit(
   }
 
   // 仍超预算:对 CORE 段按 content 截短(保留段,只缩短内容)
+  // 特殊处理:characters 段截短时,优先保留所有角色名(name 字段),即使简介被砍
   if (total > inputBudget) {
     for (const item of kept) {
       if (total <= inputBudget) break
@@ -135,11 +136,59 @@ function trimToFit(
       const targetTokens = Math.max(64, item.segment.tokens - overflow - 32)
       if (item.segment.tokens <= targetTokens) continue
       const approxChars = Math.max(40, Math.floor(targetTokens * 1.4))
-      item.segment.content = item.segment.content.slice(0, approxChars) + '\n...(核心上下文源已按预算截断)'
+
+      if (item.key === 'characters') {
+        const names = extractCharacterNames(item.segment.content)
+        if (names.length > 0) {
+          const namesHeader = '【已创建的角色 · 名字清单(简介已裁)】\n' + names.join(' / ') + '\n\n'
+          const remainingBudget = approxChars - namesHeader.length
+          if (remainingBudget > 40) {
+            item.segment.content = namesHeader + item.segment.content.slice(0, remainingBudget) + '\n...(简介已截断,以上名字均为可用角色)'
+          } else {
+            item.segment.content = namesHeader
+          }
+        } else {
+          item.segment.content = item.segment.content.slice(0, approxChars) + '\n...(核心上下文源已按预算截断)'
+        }
+      } else {
+        item.segment.content = item.segment.content.slice(0, approxChars) + '\n...(核心上下文源已按预算截断)'
+      }
+
       item.segment.tokens = estimateTokens(item.segment.content)
       total = kept.reduce((sum, s) => sum + s.segment.tokens, 0)
     }
   }
 
   return { kept, trimmed }
+}
+
+/**
+ * 从角色库 content 中抽取所有 name 字段(每行"- name(...)"格式)
+ */
+function extractCharacterNames(content: string): string[] {
+  const names: string[] = []
+  const lines = content.split('\n')
+  for (const line of lines) {
+    // 识别 buildCharacterContext 的多种输出格式:
+    // 1. "苏妄凝（主要 · 中立善良）..."     ← main
+    // 2. "方屹：特助..."                    ← secondary(中文冒号)
+    // 3. "苏妄凝、方屹(其他)..."            ← others(顿号分隔)
+    // 4. "- 苏妄凝(...)..."                 ← 列表项
+    const m = line.match(/^[\s-]*([\u4e00-\u9fa5A-Za-z·（）()0-9]{2,})\s*[（(:：]/)
+    if (m && m[1]) {
+      const name = m[1].trim()
+      if (!names.includes(name)) names.push(name)
+      // 顿号或逗号分隔的同义词(others 列表)
+      const rest = line.substring(m.index! + m[0].length)
+      const more = rest.split(/[、,，]/)
+      for (const part of more) {
+        const t = part.trim()
+        if (t.length >= 2 && t.length <= 20) {
+          const m2 = t.match(/^([\u4e00-\u9fa5A-Za-z·（）()0-9]{2,})[（(]/)
+          if (m2 && m2[1] && !names.includes(m2[1])) names.push(m2[1])
+        }
+      }
+    }
+  }
+  return names
 }

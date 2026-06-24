@@ -169,13 +169,7 @@ export default function DetailedOutlinePanel({ project }: Props) {
     const idx = chapterNodes.indexOf(currentChapter)
     const prevSummary = idx > 0 ? (chapterNodes[idx - 1].summary || '') : ''
     const nextSummary = idx < chapterNodes.length - 1 ? (chapterNodes[idx + 1].summary || '') : ''
-    const { worldContext: worldCtx } = await buildDetailContext(currentChapter.id!)
-
-    const charCtx = characters
-      .filter(c => c.roleWeight === 'main')
-      .map(c => `[ID:${c.id}] ${c.name}（${c.orderAxis}/${c.moralAxis}）`)
-      .join('\n')
-
+    const { worldContext: worldCtx, characterContext: charCtx } = await buildDetailContext(currentChapter.id!)
     const foreshadowCtx = foreshadows
       .filter(f => f.status !== 'resolved')
       .map(f => `[ID:${f.id}] ${f.name}（${f.type}）：${f.description}`)
@@ -263,10 +257,11 @@ export default function DetailedOutlinePanel({ project }: Props) {
       sourceKeys: ['worldview', 'storyCore', 'powerSystem', 'codex', 'characters', 'creativeRules', 'worldRules', 'historical', 'locations'],
     })
     const worldCtx = baseCtx.text
-    const charCtx = characters
-      .filter(c => c.roleWeight === 'main')
-      .map(c => `[ID:${c.id}] ${c.name}（${c.orderAxis}/${c.moralAxis}）`)
-      .join('\n')
+    // R-22: 用 baseCtx.assembled.characters 段(经过 CORE 保护 + 名字保底)
+    const charCtx = (() => {
+      const idx = baseCtx.included.indexOf('characters')
+      return idx >= 0 ? baseCtx.segments[idx]?.content ?? '' : ''
+    })()
     const foreshadowCtx = foreshadows
       .filter(f => f.status !== 'resolved')
       .map(f => `[ID:${f.id}] ${f.name}（${f.type}）：${f.description}`)

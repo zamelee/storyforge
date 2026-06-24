@@ -18,6 +18,25 @@ const DEFAULT_CONFIG: AIConfig = {
   maxTokens: 0,
 }
 
+/**
+ * 比较两个 AIConfig 是否"等同"(用于智能关联预设)
+ * 字段顺序无关;数值用绝对误差;apiKey 不参与(预设里通常空)
+ */
+function isSameConfig(a: AIConfig, b: AIConfig): boolean {
+  if (!a || !b) return false
+  const keys: (keyof AIConfig)[] = ['provider', 'model', 'baseUrl', 'temperature', 'maxTokens']
+  for (const k of keys) {
+    const va = a[k]
+    const vb = b[k]
+    if (typeof va === 'number' && typeof vb === 'number') {
+      if (Math.abs(va - vb) > 1e-9) return false
+    } else if (va !== vb) {
+      return false
+    }
+  }
+  return true
+}
+
 /** 从 localStorage 加载预设列表 */
 function loadPresets(): AIConfigPreset[] {
   try {
@@ -134,8 +153,10 @@ interface AIConfigStore {
   config: AIConfig
   rememberApiKey: boolean
   presets: AIConfigPreset[]
-  /** 当前生效的预设 id（null = 未对应任何预设/已改动） */
+  /** 当前生效的预设 id(null = 未对应任何预设/已改动) */
   activePresetId: string | null
+  /** 最近一次"点 chip 选中"的预设 id(用于 ↺ 重置) */
+  lastSelectedPresetId: string | null
   setConfig: (config: Partial<AIConfig>) => void
   setRememberApiKey: (remember: boolean) => void
   switchProvider: (provider: AIProvider) => void
@@ -146,6 +167,8 @@ interface AIConfigStore {
   updatePresetFromCurrent: (id: string) => void
   renamePreset: (id: string, name: string) => void
   deletePreset: (id: string) => void
+  /** 把 config 重置回 lastSelectedPresetId 对应的预设 */
+  resetToLastSelectedPreset: () => void
 }
 
 const initial = loadInitialConfig()
@@ -155,12 +178,14 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   rememberApiKey: initial.rememberApiKey,
   presets: loadPresets(),
   activePresetId: null,
+  lastSelectedPresetId: null,
 
   setConfig: (partial: Partial<AIConfig>) => {
     const newConfig = { ...get().config, ...partial }
     persistConfig(newConfig, get().rememberApiKey)
-    // 手动改动配置后，与已选预设脱钩（除非改动等于该预设）
-    set({ config: newConfig, activePresetId: null })
+    // 智能脱钩:改动完如果跟某个预设完全一致,自动关联回去;否则脱钩
+    const matched = get().presets.find((p) => isSameConfig(p.config, newConfig))
+    set({ config: newConfig, activePresetId: matched ? matched.id : null })
   },
 
   setRememberApiKey: (remember: boolean) => {
@@ -177,7 +202,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
     }
     const presets = [...get().presets, preset]
     savePresets(presets)
-    set({ presets, activePresetId: id })
+    set({ presets, activePresetId: id, lastSelectedPresetId: id })
     return id
   },
 
@@ -186,7 +211,7 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
     if (!preset) return
     const newConfig = { ...preset.config, apiKey: preset.config.apiKey || get().config.apiKey }
     persistConfig(newConfig, get().rememberApiKey)
-    set({ config: newConfig, activePresetId: id })
+    set({ config: newConfig, activePresetId: id, lastSelectedPresetId: id })
   },
 
   updatePresetFromCurrent: (id: string) => {
@@ -207,7 +232,26 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
   deletePreset: (id: string) => {
     const presets = get().presets.filter(p => p.id !== id)
     savePresets(presets)
-    set({ presets, activePresetId: get().activePresetId === id ? null : get().activePresetId })
+    const s = get()
+    set({
+      presets,
+      activePresetId: s.activePresetId === id ? null : s.activePresetId,
+      lastSelectedPresetId: s.lastSelectedPresetId === id ? null : s.lastSelectedPresetId,
+    })
+  },
+
+  /**
+   * 把 config 重置回最近一次选中的预设(lastSelectedPresetId)
+   * 没有 lastSelectedPresetId 时什么都不做
+   */
+  resetToLastSelectedPreset: () => {
+    const s = get()
+    if (!s.lastSelectedPresetId) return
+    const preset = s.presets.find((p) => p.id === s.lastSelectedPresetId)
+    if (!preset) return
+    const newConfig = { ...preset.config, apiKey: preset.config.apiKey || s.config.apiKey }
+    persistConfig(newConfig, s.rememberApiKey)
+    set({ config: newConfig, activePresetId: preset.id })
   },
 
   switchProvider: (provider: AIProvider) => {
@@ -219,7 +263,9 @@ export const useAIConfigStore = create<AIConfigStore>((set, get) => ({
       apiKey: provider === get().config.provider ? get().config.apiKey : (preset.apiKey || ''),
     }
     persistConfig(newConfig, get().rememberApiKey)
-    set({ config: newConfig, activePresetId: null })
+    // 智能脱钩:切 provider 后如果跟某预设一致就关联,否则脱钩
+    const matched = get().presets.find((p) => isSameConfig(p.config, newConfig))
+    set({ config: newConfig, activePresetId: matched ? matched.id : null })
   },
 
   testConnection: async (): Promise<TestResult> => {

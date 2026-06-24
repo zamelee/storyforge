@@ -35,7 +35,7 @@ const THEME_OPTIONS = [
 export default function AIConfigPanel() {
   const { config, setConfig, switchProvider, testConnection,
     rememberApiKey, setRememberApiKey,
-    presets, activePresetId, saveAsPreset, applyPreset, updatePresetFromCurrent, renamePreset, deletePreset } = useAIConfigStore()
+    presets, activePresetId, lastSelectedPresetId, saveAsPreset, applyPreset, updatePresetFromCurrent, renamePreset, deletePreset, resetToLastSelectedPreset } = useAIConfigStore()
   const dialog = useDialog()
   const llmMonitorEnabled = useLLMMonitorStore((s) => s.enabled)
   const llmMonitorSetEnabled = useLLMMonitorStore((s) => s.setEnabled)
@@ -137,6 +137,38 @@ export default function AIConfigPanel() {
             )}
           </div>
 
+          {/* "已修改未关联" 提示行:activePresetId=null 时(改动后跟任何预设都不一致),提示用户保存 */}
+          {activePresetId === null && lastSelectedPresetId && (
+            <div className="mb-2 px-2 py-1.5 text-[11px] rounded border border-amber-500/30 bg-amber-500/10 text-amber-300 flex items-center gap-2 flex-wrap">
+              <span>⚠️ 已修改(未关联预设)</span>
+              {presets.find(x => x.id === lastSelectedPresetId) && (
+                <button
+                  onClick={() => updatePresetFromCurrent(lastSelectedPresetId!)}
+                  className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200"
+                  title={`保存到「${presets.find(x => x.id === lastSelectedPresetId)?.name}」`}
+                >
+                  💾 保存到「{presets.find(x => x.id === lastSelectedPresetId)?.name}」
+                </button>
+              )}
+              <button
+                onClick={() => setSavingPreset(true)}
+                className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200"
+                title="另存为新预设"
+              >
+                📋 另存为新预设
+              </button>
+              {presets.find(x => x.id === lastSelectedPresetId) && (
+                <button
+                  onClick={resetToLastSelectedPreset}
+                  className="px-1.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200"
+                  title={`放弃改动,回到「${presets.find(x => x.id === lastSelectedPresetId)?.name}」`}
+                >
+                  ↺ 放弃改动
+                </button>
+              )}
+            </div>
+          )}
+
           {presets.length === 0 ? (
             <p className="text-xs text-text-muted">还没有预设。配好一套 API 后点「保存当前为预设」，之后可一键切换。</p>
           ) : (
@@ -153,12 +185,17 @@ export default function AIConfigPanel() {
                   <button onClick={() => applyPreset(p.id)} title={`${p.config.provider} · ${p.config.model}`}>
                     {p.name}
                   </button>
-                  {activePresetId === p.id && (
+                  <button
+                    onClick={() => updatePresetFromCurrent(p.id)}
+                    title="把当前配置保存到这个预设"
+                    className={`${activePresetId === p.id ? 'opacity-70' : 'opacity-0 group-hover:opacity-70'} hover:opacity-100`}
+                  >💾</button>
+                  {activePresetId === p.id && activePresetId !== lastSelectedPresetId && (
                     <button
-                      onClick={() => updatePresetFromCurrent(p.id)}
-                      title="用当前配置覆盖此预设"
+                      onClick={resetToLastSelectedPreset}
+                      title={`重置回「${presets.find(x => x.id === lastSelectedPresetId)?.name || '最近预设'}」`}
                       className="opacity-70 hover:opacity-100"
-                    >💾</button>
+                    >↺</button>
                   )}
                   <button
                     onClick={() => { void handleRenamePreset(p.id, p.name) }}

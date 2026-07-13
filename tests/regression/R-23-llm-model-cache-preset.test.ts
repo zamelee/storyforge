@@ -14,6 +14,8 @@ import {
   clearCachedModels,
   clearAllCachedModels,
 } from '../../src/lib/ai/llm-model-cache'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 import { db } from '../../src/lib/db/schema'
 
 describe('R-23: LLM 模型列表缓存 + 域名提取', () => {
@@ -171,7 +173,7 @@ describe('R-23: LLM 模型列表缓存 + 域名提取', () => {
     it('AIConfigPanel.tsx 中 openSavePreset 调用了 suggestPresetNameFromBaseUrl', async () => {
       const fs = await import('node:fs/promises')
       const src = await fs.readFile(
-        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/settings/AIConfigPanel.tsx'),
         'utf8',
       )
       expect(src).toMatch(/openSavePreset[\s\S]*suggestPresetNameFromBaseUrl/)
@@ -181,7 +183,7 @@ describe('R-23: LLM 模型列表缓存 + 域名提取', () => {
     it('新建(空白)按钮 onClick 触发 setCreatingNew(true)', async () => {
       const fs = await import('node:fs/promises')
       const src = await fs.readFile(
-        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/settings/AIConfigPanel.tsx'),
         'utf8',
       )
       expect(src).toMatch(/setCreatingNew\(true\)/)
@@ -190,7 +192,7 @@ describe('R-23: LLM 模型列表缓存 + 域名提取', () => {
     it('Dialog 中保存按钮调用 handleSaveNewPreset', async () => {
       const fs = await import('node:fs/promises')
       const src = await fs.readFile(
-        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/settings/AIConfigPanel.tsx'),
         'utf8',
       )
       expect(src).toMatch(/onClick=\{handleSaveNewPreset\}/)
@@ -202,7 +204,7 @@ describe('R-23: LLM 模型列表缓存 + 域名提取', () => {
     it('B 方案:useEffect 拉取成功时把当前 model 放到列表首位', async () => {
       const fs = await import('node:fs/promises')
       const src = await fs.readFile(
-        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/settings/AIConfigPanel.tsx'),
         'utf8',
       )
       // 关键代码片段:cur && !models.includes(cur) ? [cur, ...models] : models
@@ -212,7 +214,7 @@ describe('R-23: LLM 模型列表缓存 + 域名提取', () => {
     it('E 方案:modelInputRef 已声明并绑定到 input', async () => {
       const fs = await import('node:fs/promises')
       const src = await fs.readFile(
-        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/settings/AIConfigPanel.tsx'),
         'utf8',
       )
       expect(src).toMatch(/const modelInputRef = useRef<HTMLInputElement>\(null\)/)
@@ -222,7 +224,7 @@ describe('R-23: LLM 模型列表缓存 + 域名提取', () => {
     it('E 方案:handleShowAllModels 清空 input + focus', async () => {
       const fs = await import('node:fs/promises')
       const src = await fs.readFile(
-        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/settings/AIConfigPanel.tsx'),
         'utf8',
       )
       expect(src).toMatch(/handleShowAllModels/)
@@ -234,7 +236,7 @@ describe('R-23: LLM 模型列表缓存 + 域名提取', () => {
     it('E 方案:模型输入框旁有 ▼ 按钮 onClick=handleShowAllModels', async () => {
       const fs = await import('node:fs/promises')
       const src = await fs.readFile(
-        'D:/AiSystem/storyforge/src/components/settings/AIConfigPanel.tsx',
+        resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/settings/AIConfigPanel.tsx'),
         'utf8',
       )
       expect(src).toMatch(/onClick=\{handleShowAllModels\}/)

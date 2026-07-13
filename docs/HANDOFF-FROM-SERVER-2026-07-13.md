@@ -208,3 +208,307 @@ npm run dev -- --port 2222 --no-open
 | 改 source 文件前备份 | ✅(`tmp/code-backups/` 或其他) |
 | 不覆盖用户已有文件 | ✅(写 HANDOFF 前 `git log -- <file>`) |
 
+
+---
+
+## 二、yuanbw/main 合并分析（2026-07-13）
+
+### 2.1 三端关系
+
+| 端 | HEAD | 版本 | 相对关系 |
+|----|------|------|---------|
+| 本地 / zamelee/main | d284fb | v3.6.0 | 同步 |
+| yuanbw/main（原作者） | 54d57e2 | v3.7.5 | 领先 196 commits，落后本地 16 commits |
+
+**关键发现**：yuanbw 的 16 个"落后"commits（R-19~R-23）**从未合并进 yuanbw/main**——它们存在于本地/我们的 origin，但不在 yuanbw/main。这是平行演进的两个分支。
+
+### 2.2 本地 16 个独有关键 commits（yuanbw 没有）
+
+| Commit | 描述 |
+|--------|------|
+| 9214e83 | fix(inspiration-reverse): 解析健壮化 |
+| d14aad0 | chore: ignore .tmp/ |
+| 7e65303 | fix(outline): 卷/章纲关联角色库 |
+| 4f043db | chore(boot): 暴露 window.__assembleContext |
+| 1fa8c92 | fix(assemble-context): 保护 CORE 源不被 trim 移除（R-19） |
+| c6906d2 | fix(story-arc): 故事弧关联角色库（R-20） |
+| a77d2b | feat(debug): LLM Monitor 浮窗（R-21） |
+| 361eb9 | fix(debug): fetch interceptor 分离（R-21.1） |
+| 795228 | feat(preset): 智能关联 + reset + lastSelectedPresetId（R-22） |
+| 89a201 | feat(preset): new-preset 对话框 + /models 缓存（R-23） |
+| 7612ef4 | fix(preset): datalist show-all（R-23.1） |
+| 47cca1 | fix(outline): 章纲/细纲/批量关联角色（R-22） |
+| 5a39e83 | docs(R-22): R-22 记录 |
+| c0e4c21 | fix(outline): summary.trim() 补丁 |
+
+### 2.3 yuanbw 196 个新 commits——核心功能（本地缺失）
+
+| 功能 | 描述 | 对后端影响 |
+|------|------|----------|
+| **23维度角色** | identity/fears/values/innerConflict/powerLevel/speechStyle/habits/signatureItem 等 | schema Character 表需扩充 |
+| **NS-4 事实账本** | TemporalFact 类型 + act-ledger 模块 + 候选/确认/否决状态机 | schema 需新增表 |
+| **NS-5 叙事摘要** | NarrativeSummary（章→卷→全书派生缓存） | schema 需新增表 |
+| **导入去重** | d06296c | schema 需 ImportSession 表 |
+| **大纲 summary 修复** | 170199c — defaults 注册表机制（优于我们的 summary?.trim()） | 取 yuanbw |
+
+### 2.4 合并冲突清单（试合并结果）
+
+**仅 11 个文件有真实冲突**（可接受）：
+
+| 文件 | 冲突本质 | 建议策略 |
+|------|---------|---------|
+| src/lib/db/schema.ts | 我们的 llmModelCache（R-23）vs yuanbw schema | 取我们 |
+| src/stores/ai-config.ts | R-22/R-23 preset 智能关联 vs yuanbw | 取我们 |
+| src/main.tsx | LLM Monitor 安装 vs yuanbw | 需手动二选一 |
+| src/lib/registry/context-sources.ts | R-19 CORE 保护 vs yuanbw context 重构 | 需手动合并 |
+| src/lib/ai/inspiration-reverse.ts | 我们的健壮化 vs yuanbw | 取我们 |
+| src/components/settings/AIConfigPanel.tsx | preset UI vs yuanbw | 取我们 |
+| CHANGELOG.md | 日志追加 | 取 yuanbw |
+| .gitignore | 追加忽略项 | 合并两者 |
+| docs/AI-FUNCTIONS-MANUAL.generated.md | 生成文档 | 取 yuanbw |
+| 	ests/registry/project-tables.test.ts | 测试用例差异 | 需手动合并 |
+| 	ests/regression/R-17-ensure-schema.test.ts | 测试用例差异 | 需手动合并 |
+
+**大量文件是 AD（yuanbw 新增/我们删除）**——yuanbw 归档了大量旧文档，同时新增了 feature-guide 图片资源、COLLAB-LOG 等。
+
+### 2.5 合并策略建议
+
+**推荐方案：Rebase 而非 Merge**
+
+`powershell
+# 1. 从 origin/main 起新分支
+git checkout -b merge-yuanbw-v375 origin/main
+
+# 2. 把本地 16 个 commits rebase 到 yuanbw/main 之上
+git rebase --onto yuanbw/main fd284fb^ fd284fb
+`
+
+这样 yuanbw 的 196 个新 commit 作为新基础，本地 16 个 commits 叠在上面。
+冲突只出现在 rebased 的 16 个 commits 范围内。
+
+**最重要的 2 个手动决策**：
+1. src/main.tsx — 我们的 LLM Monitor vs yuanbw，只能留一个
+2. src/lib/registry/context-sources.ts — R-19 vs yuanbw context 重构
+
+### 2.6 storyforge-server 后端影响
+
+yuanbw 的 196 个新 commit 中，以下必须同步到 ackend/prisma/schema.prisma：
+- Character 表：新增 15+ 字段
+- 新建 TemporalFact 表（含状态机）
+- 新建 NarrativeSummary 表
+- 新建 ImportSession 表
+
+---
+
+*更新于 2026-07-13：加入 yuanbw/main 对比分析 + 合并冲突清单*
+
+---
+
+## 三、合并执行计划（已确认，2026-07-13）
+
+> **约束**：遵守 AGENTS.md —— 不直接 push main，所有改动走分支 merge-yuanbw-v375，验证步骤必跑。
+
+### 3.1 最终确认的合并策略
+
+#### 冲突 A：src/main.tsx
+
+| 模块 | 决策 |
+|------|------|
+| LLM Monitor import | **保留我们的**（import './lib/debug/install'） |
+| DEV assemble-context 预加载 | **保留我们的**（if (import.meta.env.DEV) void import(...)） |
+| 主题迁移 | **取 yuanbw**（esolveStoryForgeTheme + pplyStoryForgeTheme 更完整） |
+| 持久化存储（FB-11） | yuanbw 已有，等效，合并 |
+| 注册表校验 | yuanbw 已有，等效，合并 |
+
+#### 冲突 B：src/lib/registry/assemble-context.ts trimToFit
+
+**合并策略**：取我们 R-19 的 CORE_SOURCE_KEYS 截短逻辑 + 把 yuanbw 的 protectedFromTrim 字段也合并进来。
+
+最终行为：
+- 以 R-19 为主（更保守，保护 worldview/characters 等关键源不被整段删掉）
+- 同时采纳 protectedFromTrim 字段机制（兼容性更好）
+- yuanbw 的 chapterOutline 等 protectedFromTrim: true 源也一并保护
+
+#### 11 个冲突文件的统一策略
+
+| 文件 | 策略 |
+|------|------|
+| src/lib/db/schema.ts | 取我们的（R-23 llmModelCache 特性需保留） |
+| src/stores/ai-config.ts | 取我们的（R-22/R-23 preset 智能关联） |
+| src/main.tsx | 混合（见上表） |
+| src/lib/registry/assemble-context.ts | 合并（见上） |
+| src/components/settings/AIConfigPanel.tsx | 取我们的（R-23 preset UI） |
+| src/lib/ai/inspiration-reverse.ts | 取我们的（健壮化） |
+| CHANGELOG.md | 取 yuanbw（更新到 v3.7.5） |
+| .gitignore | 合并两者（都有的不重复） |
+| docs/AI-FUNCTIONS-MANUAL.generated.md | 取 yuanbw（自动生成） |
+| 	ests/registry/project-tables.test.ts | 手工合并（测试用例都有价值） |
+| 	ests/regression/R-17-ensure-schema.test.ts | 手工合并 |
+
+#### 非冲突文件采纳策略
+
+- **23 维度角色字段**：直接采纳（只增不减）
+- **NS-4 事实账本**：采纳整个 acts/ 模块（如果用户需要此功能）
+- **NS-5 叙事摘要**：采纳（如果用户需要此功能）
+- **defaults 注册表机制**（170199c）：采纳（根治大纲 summary undefined）
+- **yuanbw 的 LLM Monitor**：放弃（保留我们的 R-21）
+- **导入去重**（d06296c）：采纳
+
+### 3.2 执行步骤
+
+`
+1. git checkout -b merge-yuanbw-v375 origin/main
+2. git rebase --onto yuanbw/main fd284fb^ fd284fb
+3. 解决 11 个冲突文件（按上表策略）
+4. git rebase --continue
+5. 运行测试：npm test
+6. 浏览器人工验证（启动 dev server）
+7. 确认无崩溃后：git checkout main && git merge merge-yuanbw-v375 && git push origin main
+`
+
+### 3.3 待确认
+
+- [ ] NS-4 事实账本是否采纳整套？（用户未明确，按需决定）
+- [ ] NS-5 叙事摘要是否采纳？（同上）
+- [ ] yuanbw 的 LLM Monitor 思路（b80606 LongCat provider）是否需要？
+
+*确认后更新本节*
+
+---
+
+## 三、合并执行计划（已确认，2026-07-13）
+
+> 目标：将 yuanbw/main（v3.7.5）合入本地分支，保留本地 16 个独有关键 commits。
+> 分支策略：Rebase 而非 Merge，避免环形依赖。
+> 操作目录：D:\Documents\VibeCoding\storyforge
+
+### 3.1 前置准备
+
+**步骤 0：确认 backup 根**
+
+根据 AGENTS.md §7，代码修改前需创建备份目录：
+
+`powershell
+# backup 根： D:\Documents\VibeCoding\storyforge\tmp\code-backups\
+New-Item -ItemType Directory -Path "D:\Documents\VibeCoding\storyforge\tmp\code-backups" -Force
+`
+
+**步骤 1：确认当前状态**
+
+`powershell
+cd D:\Documents\VibeCoding\storyforge
+git log -1 --format="%h %s"   # 应为 fd284fb
+git status --short
+`
+
+### 3.2 分支操作
+
+**步骤 2：从 origin/main 起新分支（不污染 main）**
+
+`powershell
+git checkout -b merge-yuanbw-v375 origin/main
+`
+
+**步骤 3：执行 rebase**
+
+`powershell
+# 把本地 16 个 commits（c0e4c21~fd284fb）rebase 到 yuanbw/main 之上
+git rebase --onto yuanbw/main fd284fb^ fd284fb
+`
+
+**预期**：冲突出现在 rebased 的 16 个 commits 范围内（11 个文件）。
+
+### 3.3 冲突解决清单（已确认方案）
+
+#### 冲突 1：src/main.tsx
+
+**原则**：我们的 Monitor + DEV 预加载  + yuanbw 主题迁移/持久化/注册表校验 = 合并
+
+**解决步骤**：
+1. 取我们的 import './lib/debug/install' 和 DEV 预加载行
+2. 取 yuanbw 的 esolveStoryForgeTheme / pplyStoryForgeTheme 主题迁移逻辑
+3. 两者都有的 FB-11 / validateRegistry / schema check / prompt store / workflow store 取任一（两者等价）
+
+#### 冲突 2：src/lib/registry/assemble-context.ts
+
+**原则**：取我们的 R-19 CORE_SOURCE_KEYS 截短逻辑，把 yuanbw 的 protectedFromTrim 字段合并进来
+
+**解决步骤**：
+1. 保留 CORE_SOURCE_KEYS 常量 + 第二轮截短逻辑（我们的）
+2. 把 yuanbw 的 protectedFromTrim?: boolean 字段合并进 ContextSource 接口（types.ts）
+3. 在 ssemble-context.ts 中，把 yuanbw 有 protectedFromTrim: true 的源也加入 CORE_SOURCE_KEYS（handoffText/planReconciliationText/heldItems）
+4. worldview 和 characters 在我们的版本里已由 CORE 保护；yuanbw 版本这两个源没有 protectedFromTrim，取我们的版本
+
+#### 其余 9 个冲突文件
+
+| 文件 | 策略 |
+|------|------|
+| .gitignore | 合并两者（追加） |
+| CHANGELOG.md | 取 yuanbw（更新的日志） |
+| docs/AI-FUNCTIONS-MANUAL.generated.md | 取 yuanbw（自动生成文档） |
+| src/lib/ai/inspiration-reverse.ts | 取我们（健壮化解析功能互补可合并） |
+| src/components/settings/AIConfigPanel.tsx | 取我们（R-22/R-23 preset UI） |
+| src/lib/db/schema.ts | 取我们（R-23 llmModelCache 缓存表保留） |
+| src/stores/ai-config.ts | 取我们（R-22/R-23 智能预设关联） |
+| 	ests/registry/project-tables.test.ts | 手动合并（测试用例差异） |
+| 	ests/regression/R-17-ensure-schema.test.ts | 手动合并（测试用例差异） |
+
+### 3.4 合并后验证
+
+`powershell
+# 确认 rebase 成功
+git log --oneline -5
+
+# 安装依赖（yuanbw 可能改过 package.json）
+npm install
+
+# 运行测试
+npm test -- --run
+
+# 启动验证
+npm run dev -- --port 2222 --no-open
+`
+
+### 3.5 确认合并完成
+
+确认点：
+- yuanbw/main 的 196 个新 commits 全部出现
+- 本地 16 个 commits（c0e4c21~fd284fb）正确叠在之上
+- src/lib/debug/install.ts 保留（我们的 LLM Monitor）
+- src/lib/registry/assemble-context.ts 含 CORE_SOURCE_KEYS + 第二轮截短逻辑
+
+### 3.6 注意事项
+
+- **不 commit**：所有冲突解决后 git add . + git rebase --continue，不单独 commit
+- **编码**：修改任何文件前用 Python 做字符串处理（AGENTS.md §6）
+- **备份**：每次写源文件前在 	mp/code-backups/ 创建备份
+- **tmp 文件**：临时脚本用 _ 前缀，结束后列出清理清单
+
+---
+
+*更新于 2026-07-13：合并执行计划（已与用户确认细节）*
+
+
+---
+## 本次修复记录 (2026-07-13)
+
+### 合并状态
+- **分支**: `test-merge-yuanbw` (跟踪 origin/main，合并自 yuanbw/main)
+- **Commit 范围**: yuanbw/main..HEAD = 16 commits (R-19/R-20/R-21/R-22/R-23 全部在列)
+- **上游 tip**: `54d57e2` (yuanbw/main v3.7.5)
+
+### 修复的问题
+1. **测试路径硬编码** (D:\AiSystem\storyforge\ → 动态路径):
+   - `tests/regression/R-22-chapter-character-binding.test.ts`: 
+     - 替换硬编码 → `resolve(dirname(fileURLToPath(import.meta.url)), '../../src/...')`
+     - 添加 `import { fileURLToPath } from 'node:url'` 和 `import { dirname, resolve } from 'node:path'`
+   - `tests/regression/R-23-llm-model-cache-preset.test.ts` (7 处): 同上模式
+2. **AI Manual 过期**: `npm run gen:ai-manual` 重新生成
+3. **依赖更新**: `npm install` (package-lock.json 更新)
+
+### 测试结果
+- `npm test -- --run`: **72 test files, 300 tests — 全部通过**
+- `npm run dev -- --port 2222`: Vite 启动成功，响应正常
+
+### 当前分支
+- `test-merge-yuanbw` (已切换自 `merge-yuanbw-v375` 的错误 rebase 状态)

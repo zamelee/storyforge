@@ -6,6 +6,8 @@ import { db } from '../../src/lib/db/schema'
 import { assembleContext } from '../../src/lib/registry/assemble-context'
 import { buildChapterContentPrompt } from '../../src/lib/ai/adapters/chapter-adapter'
 import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 
 describe('R-22: 角色库完整绑定', () => {
   it('1. assembleContext 在 budget 极小时仍保留所有角色名', async () => {
@@ -71,7 +73,7 @@ describe('R-22: 角色库完整绑定', () => {
 
   it('4. DetailedOutlinePanel 不再硬编码 main-only 角色过滤', () => {
     const src = readFileSync(
-      'D:/AiSystem/storyforge/src/components/outline/DetailedOutlinePanel.tsx',
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../src/components/outline/DetailedOutlinePanel.tsx'),
       'utf8',
     )
     const bad = src.match(/filter\s*\(\s*c\s*=>\s*c\.roleWeight\s*===\s*['"]main['"]\s*\)/g) || []

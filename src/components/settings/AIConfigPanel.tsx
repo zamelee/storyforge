@@ -1,5 +1,5 @@
 import { useState, useEffect, useSyncExternalStore, useRef } from 'react'
-import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText } from 'lucide-react'
+import { Wifi, WifiOff, Eye, EyeOff, CheckCircle, Trash2, ScrollText, Info, X } from 'lucide-react'
 import { useAIConfigStore, type TestResult } from '../../stores/ai-config'
 import { useLLMMonitorStore } from '../../lib/debug/store'
 import type { AIProvider } from '../../lib/types'
@@ -46,6 +46,8 @@ export default function AIConfigPanel() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
   const [showLogs, setShowLogs] = useState(false)
+  const [showMonitorConfirm, setShowMonitorConfirm] = useState(false)
+  const [monitorKeepAlive, setMonitorKeepAlive] = useState(() => localStorage.getItem('sf_llm_monitor_keepalive') === 'true')
   const [savingPreset, setSavingPreset] = useState(false)
   const [presetName, setPresetName] = useState('')
   // R-23: 新建空白预设(B-1:从零建)
@@ -623,19 +625,78 @@ export default function AIConfigPanel() {
             <input type="checkbox" checked={llmMonitorEnabled} onChange={async (e) => {
               const v = e.target.checked
               if (v && !llmMonitorConfirmed) {
-                const ok = await dialog.confirm({
-                  title: '启用 LLM 监控?',
-                  message: '此工具会把所有 LLM 调用的请求和响应文本保留在浏览器内存中(包括世界观/角色库/未公开剧情等敏感数据)。\n\n开启后 5 分钟无操作会自动清空。\n\n确认启用?',
-                  confirmText: '我已了解,启用', 
-                })
-                if (!ok) return
-                llmMonitorSetConfirmed()
+                setShowMonitorConfirm(true)
+                return
               }
               llmMonitorSetEnabled(v)
             }} className="accent-accent w-4 h-4" />
             <span className="text-sm text-text-secondary">启用</span>
           </label>
         </div>
+
+          {/* LLM Monitor 启用确认弹层 */}
+          {showMonitorConfirm && (
+            <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/55 px-4">
+              <div className="w-full max-w-sm rounded-lg border border-border bg-bg-surface shadow-2xl">
+                <div className="flex items-start gap-3 border-b border-border px-4 py-3">
+                  <Info className="mt-0.5 h-5 w-5 shrink-0 text-accent" />
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-sm font-semibold text-text-primary">启用 LLM 监控?</h2>
+                    <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-text-muted">
+                      此工具会把所有 LLM 调用的请求和响应文本保留在浏览器内存中（包括世界观/角色库/未公开剧情等敏感数据）。
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowMonitorConfirm(false)}
+                    className="rounded p-1 text-text-muted hover:bg-bg-elevated hover:text-text-primary"
+                    aria-label="关闭"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="px-4 py-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={monitorKeepAlive}
+                      onChange={(e) => setMonitorKeepAlive(e.target.checked)}
+                      className="mt-0.5 accent-accent w-4 h-4"
+                    />
+                    <div>
+                      <p className="text-xs text-text-secondary font-medium">持续监控（不受 5 分钟自动清空影响）</p>
+                      <p className="text-[11px] text-text-muted mt-0.5">勾选后 LLM Monitor 持续保留记录，调试期间建议开启。</p>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setShowMonitorConfirm(false)}
+                    className="rounded border border-border px-3 py-1.5 text-sm text-text-secondary hover:bg-bg-elevated hover:text-text-primary"
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMonitorConfirm(false)
+                      if (monitorKeepAlive) {
+                        localStorage.setItem('sf_llm_monitor_keepalive', 'true')
+                      }
+                      llmMonitorSetConfirmed()
+                      llmMonitorSetEnabled(true)
+                    }}
+                    className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
+                  >
+                    我已了解，启用
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
       </div>
 
       {/* 主题切换 */}

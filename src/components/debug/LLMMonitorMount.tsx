@@ -3,6 +3,8 @@ import Button from './LLMMonitorButton'
 import Panel from './LLMMonitorPanel'
 import { useLLMMonitorStore } from '../../lib/debug/store'
 
+const KEEP_ALIVE_KEY = 'sf_llm_monitor_keepalive'
+
 export default function LLMMonitorMount() {
   const checkIdleClear = useLLMMonitorStore((s) => s.checkIdleClear)
 
@@ -19,7 +21,10 @@ export default function LLMMonitorMount() {
   }, [])
 
   useEffect(() => {
-    const t = setInterval(() => checkIdleClear(), 60 * 1000)
+    const t = setInterval(() => {
+      const keepAlive = localStorage.getItem(KEEP_ALIVE_KEY) === 'true'
+      if (!keepAlive) checkIdleClear()
+    }, 60 * 1000)
     return () => clearInterval(t)
   }, [checkIdleClear])
 

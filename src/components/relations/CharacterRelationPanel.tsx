@@ -112,7 +112,7 @@ export default function CharacterRelationPanel({ project }: Props) {
   const projectRelations = relations.filter((r) => r.projectId === projectId)
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6" ref={containerRef}>
+    <div className={view === 'graph' ? "w-full space-y-4" : "max-w-4xl mx-auto space-y-6"} ref={containerRef}>
       {/* 标题 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">

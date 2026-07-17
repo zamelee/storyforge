@@ -1,5 +1,6 @@
- import { useRef, useCallback, useMemo, useState, useEffect, type ComponentRef } from 'react'
+ import { useRef, useCallback, useMemo, useState, type ComponentRef } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
+import useMeasure from 'react-use-measure'
 
 type ForceGraphHandle = ComponentRef<typeof ForceGraph2D>
 import { useCharacterRelationStore } from '../../stores/character-relation'
@@ -56,30 +57,16 @@ function getInitial(name: string): string {
 
 interface Props { width?: number; height?: number }
 
- export default function RelationGraph({ width: _initialWidth, height: _initialHeight }: Props) {
-   const graphContainerRef = useRef<HTMLDivElement>(null)
+ export default function RelationGraph({ width: _initialWidth, height: _initialHeight }: Props) {
+   const graphContainerRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<ForceGraphHandle | undefined>(undefined)
   const { characters } = useCharacterStore()
   const { relations } = useCharacterRelationStore()
   const [zoom, setZoom] = useState(1)
-   const [graphSize] = useState({ width: 700, height: 600 })
-   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
-
-   // ResizeObserver: measure the flex container's actual pixel size
-   useEffect(() => {
-     if (!graphContainerRef.current) return
-     const observer = new ResizeObserver((entries) => {
-       const { width, height } = entries[0].contentRect
-       if (width > 0 && height > 0) {
-         setContainerSize({ width, height })
-       }
-     })
-     observer.observe(graphContainerRef.current)
-     return () => observer.disconnect()
-   }, [])
-  const [fontScale, setFontScale] = useState(1)
+   const [measureRef, bounds] = useMeasure()
+const [fontScale, setFontScale] = useState(1)
 
-
+
 
   // 每个角色的关系计数
   const relCountMap = useMemo(() => {
@@ -268,16 +255,18 @@ interface Props { width?: number; height?: number }
       </div>
 
       {/* Graph 撑满 flex-1，min-h-0 让 flex 收缩生效 */}
-       <div
-         ref={graphContainerRef}
-         className="flex-1 min-h-0"
-         style={{ minHeight: 300 }}
-       >
-         <ForceGraph2D
-           ref={graphRef}
-           graphData={graphData}
-           width={containerSize.width || graphSize.width}
-           height={containerSize.height || graphSize.height}
+       <div
+         ref={measureRef}
+         className="flex-1 min-h-0"
+         style={{ minHeight: 300 }}
+       >
+         <div className="w-full h-full" style={{ minHeight: "100%" }}>
+         <ForceGraph2D
+           ref={graphRef}
+           key={`fg-${bounds.width}-${bounds.height}`}
+           graphData={graphData}
+           width={bounds.width || 700}
+           height={bounds.height || 600}
           backgroundColor="#0a0a0f"
           nodeCanvasObject={drawNode}
           nodeCanvasObjectMode={() => 'replace'}
@@ -297,6 +286,7 @@ interface Props { width?: number; height?: number }
           minimapNodeBorder={1}
           minimapPadding={5}
         />
+        </div>
       </div>
 
       {/* 图例 */}
@@ -319,5 +309,5 @@ interface Props { width?: number; height?: number }
   )
 }
 
-
-
+
+

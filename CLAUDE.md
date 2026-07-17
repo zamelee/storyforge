@@ -71,6 +71,8 @@
 | 修章节正文不读 worldRules → 在 ChapterEditor 里加一行 `buildWorldRulesContext()` | 在 `CONTEXT_SOURCES` 注册 `worldRules` 源，所有调用 `assembleContext({need:['worldRules']})` 自动注入 |
 | 加新表 → 直接 schema.ts 加 + 在 deleteProject 加一行 + 在 export 加一行 + 在 import remap 加一行... | `PROJECT_TABLES` 加一行，5 个生命周期 API 自动覆盖 |
 | 加新 AI 动作 → 写新 adapter + 在面板里手拼 `buildXxxContext + ai.start` | 走 `assembleContext + adopt`，仅在 adapter 处定义 prompt 与 reads/writes |
+| 修 prompt 模板重复 → 在 Chrome DevTools 里 `indexedDB.deleteDatabase("storyforge")` 删整个库 | IndexedDB 是全库共享的，删库 = 清空所有小说数据。正确做法：用 `store.delete(id)` 只删目标行，或用 `store.put(row)` 只更新目标行，各数据表之间互不影响 |
+| 修 IndexedDB 残留 → `indexedDB.deleteDatabase()` 删整个库重 seed | 同上：同一数据库里各表独立，删整个库会清掉所有小说、角色、大纲。只操作目标行即可 |
 
 **任何"先这样吧，等以后再统一"的念头 = 头疼医头 = 必然制造下一个反复出现的 bug**。直接拒绝。
 

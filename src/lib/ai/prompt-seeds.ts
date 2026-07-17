@@ -284,6 +284,86 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
     isActive: true,
   },
 
+  // 3b. 角色-字段补全
+  {
+    scope: 'system',
+    moduleKey: 'character.supplement',
+    promptType: 'supplement',
+    name: '内置-角色字段补全',
+    description: '根据已有字段信息，补全角色缺失的文本字段（外貌、能力、关系等）。',
+    systemPrompt: CHARACTER_SYSTEM,
+    userPromptTemplate: `【角色字段补全任务】
+本任务只为 {{characterName}} 补全缺失字段，禁止生成其他角色。
+
+规则：
+1. 只写缺失字段，已填字段（内容非空或非占位符）完整保留原貌，不得重新编写
+2. 每个缺失字段只写 100-200 字
+3. 关系描写要能写入角色关系网，请同时输出结构化 JSON
+
+角色：{{characterName}}
+
+【已有内容】（请勿修改）：
+- 一句话简介：{{shortDescription}}
+- 外貌：{{appearance}}
+- 性格：{{personality}}
+- 背景故事：{{background}}
+- 核心动机：{{motivation}}
+- 能力/技能：{{abilities}}
+- 人物关系：{{relationships}}
+- 角色弧光：{{arc}}
+
+世界观背景：
+{{worldContext}}{{#if existingCharacters}}
+
+【参考人物】（仅供关系描写定位参考，不要生成参考人物的内容）：
+{{existingCharacters}}{{/if}}{{#if userHint}}
+
+用户补充要求：{{userHint}}{{/if}}
+
+关系类型枚举（relationType 只能取以下值）：
+- family（亲属）
+- lover（恋人）
+- friend（朋友）
+- rival（对手）
+- enemy（敌人）
+- master（师父）
+- student（弟子）
+- ally（盟友）
+- subordinate（上下级）
+- other（其他）
+
+注意：relationType 只能填上述枚举值之一。
+人物关系文本必须每条关系独立一行，格式为：
+【关系类型中文】角色名：关系描述
+其中关系类型中文必须与 relationType 对应：family=亲属、lover=恋人、friend=朋友、rival=对手、enemy=敌人、master=师父、student=弟子、ally=盟友、subordinate=上下级、other=其他。
+
+输出格式：
+先输出 {{characterName}} 的补全内容（只写缺失字段），直接 Markdown，不要加标题或说明。
+
+然后在结尾输出如下 JSON 代码块（关系网写入用，每条关系的 from/to 必须是参考人物中已存在的角色名）：
+\`\`\`json
+{
+  "relationships_text": "【盟友】林知夏：一起对抗顾承曜的商业施压。",
+  "relationships_json": [
+    {
+      "toName": "林知夏",
+      "relationType": "ally",
+      "label": "坚定同盟",
+      "description": "一起对抗顾承曜的商业施压",
+      "bidirectional": false
+    }
+  ]
+}
+\`\`\``,
+    variables: ['characterName', 'shortDescription', 'appearance', 'personality', 'background', 'motivation', 'abilities', 'relationships', 'arc', 'worldContext', 'existingCharacters', 'userHint'],
+    parameters: [
+      { key: 'detailLevel', label: '详尽度', type: 'select',
+        options: ['简略', '中等', '详尽'],
+        default: '中等', description: '补全内容的详细程度', optional: true },
+    ],
+    isActive: true,
+  },
+
   // 4. 大纲-卷级
   {
     scope: 'system',

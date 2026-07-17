@@ -19,6 +19,40 @@ export interface ParsedCharacter {
   arc: string
 }
 
+/** 解析出的单条关系（用于写入 characterRelations 表） */
+export interface ParsedRelationship {
+  toName: string          // 对方角色名（需匹配到 character.id）
+  relationType: string    // 枚举值（需校验）
+  label: string           // 关系标签（如"坚定同盟"）
+  description: string     // 关系描述
+  bidirectional: boolean  // 是否双向
+}
+
+/** 解析结果 —— 关系补全输出 */
+export interface ParsedRelationshipsOutput {
+  relationships_text: string             // 角色卡文本
+  relationships_json: ParsedRelationship[] // 关系网结构化数据
+}
+
+/**
+ * 从 AI 输出中提取关系 JSON
+ * AI 输出末尾有 ```json ... ``` 代码块
+ */
+export function parseRelationshipsFromText(text: string): ParsedRelationshipsOutput | null {
+  const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/)
+  if (!jsonMatch) return null
+  try {
+    const parsed = JSON.parse(jsonMatch[1])
+    if (!parsed || typeof parsed !== 'object') return null
+    return {
+      relationships_text: typeof parsed.relationships_text === 'string' ? parsed.relationships_text : '',
+      relationships_json: Array.isArray(parsed.relationships_json) ? parsed.relationships_json : [],
+    }
+  } catch {
+    return null
+  }
+}
+
 const WEIGHT_MAP: Record<string, CharacterRoleWeight> = {
   主要: 'main', 主角: 'main', 反派: 'main', 配角: 'main',
   次要: 'secondary', NPC: 'npc', npc: 'npc', 路人: 'extra',
@@ -113,3 +147,33 @@ ${rawText}`
     return null
   }
 }
+
+/**
+ * 将 AI 返回的多角色 Markdown 文本分割为单个角色的文本块。
+ * 支持格式：
+ *   ## 1. 角色名 / ## 角色名
+ *   ### 角色名（子标题）
+ *   - **角色名**：...
+ */
+export function splitCharacterSections(text: string): string[] {
+  if (!text || !text.trim()) return []
+
+  // 优先按 ## 数字. 分割（如 ## 1. 沈国梁）
+  const numberedPattern = /(?:^|\n)(##\s*\d+\.[^\n#]+(?:\n(?:(?!##\s*\d+\.)[\s\S])*)?)/gm
+  const numbered = [...text.matchAll(numberedPattern)]
+  if (numbered.length >= 2) {
+    return numbered.map(m => m[1].trim())
+  }
+
+  // 次选：按 ## 角色名 分割（标题行 + 后续内容直到下一个 ##）
+  const headerPattern = /(?:^|\n)(##[^\n]+(?:\n(?:(?!##[^\n])[\s\S])*)?)/gm
+  const headers = [...text.matchAll(headerPattern)]
+  if (headers.length >= 2) {
+    return headers.map(m => m[1].trim())
+  }
+
+  // 兜底：整个文本作为单个角色（少数情况如单角色输出）
+  return [text.trim()]
+}
+
+

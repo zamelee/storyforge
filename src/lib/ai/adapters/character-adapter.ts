@@ -50,3 +50,39 @@ export function buildCharacterDimensionPrompt(
   }, options)
   return messages
 }
+
+/** 角色字段补全 */
+export function buildCharacterSupplementPrompt(
+  character: {
+    name: string
+    shortDescription: string
+    appearance: string
+    personality: string
+    background: string
+    motivation: string
+    abilities: string
+    relationships: string
+    arc: string
+  },
+  worldContext: string,
+  existingCharacters: string,
+  userHint?: string,
+  options?: RunOptions,
+): ChatMessage[] {
+  const tpl = usePromptStore.getState().getActive('character.supplement')
+  const { messages } = renderPrompt(tpl, {
+    characterName: character.name,
+    shortDescription: character.shortDescription || '（暂无）',
+    appearance: character.appearance || '（暂无）',
+    personality: character.personality || '（暂无）',
+    background: character.background || '（暂无）',
+    motivation: character.motivation || '（暂无）',
+    abilities: character.abilities || '（暂无）',
+    relationships: character.relationships || '（暂无）',
+    arc: character.arc || '（暂无）',
+    worldContext: worldContext || '（暂无）',
+    existingCharacters: existingCharacters || '（暂无）',
+    userHint,
+  }, options)
+  return messages
+}

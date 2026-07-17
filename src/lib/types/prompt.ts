@@ -11,9 +11,10 @@ export type PromptModuleKey =
   // 世界观
   | 'worldview.dimension'
   // 角色
-  | 'character.generate'
-  | 'character.dimension'
-  // 大纲
+ | 'character.generate'
+ | 'character.dimension'
+ | 'character.supplement'
+ // 大纲
   | 'outline.volume'
   | 'outline.chapter'
   // 章节正文

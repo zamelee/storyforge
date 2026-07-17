@@ -55,7 +55,7 @@ const ROLE_WEIGHT_BG: Record<string, string> = {
 interface GraphNode { id: string; name: string; role: string; color: string; fx?: number; fy?: number }
 interface GraphLink {
   source: string; target: string; type: string
-  bidirectional: boolean; label: string; color: string
+  bidirectional: boolean; label: string; color: string; curvature?: number
 }
 type PositionedNode = GraphNode & { x: number; y: number }
 type PositionedLink = GraphLink & { source: PositionedNode; target: PositionedNode }
@@ -123,6 +123,8 @@ interface Props { width?: number; height?: number }
         label: r.label ?? RELATION_LABELS[r.relationType] ?? r.relationType,
         color: RELATION_COLORS[r.relationType] ?? '#6b7280',
       }))
+      // 同一对角色多条关系时分配不同 curvature，使连线呈扇形展开避免重叠
+      processLinks(links)
       return { nodes, links }
     })
   }, [characters, relations])
@@ -278,14 +280,27 @@ interface Props { width?: number; height?: number }
     const start = link.source
     const end = link.target
     if (!start || !end || !start.x || !end.x) return
-    ctx.beginPath()
-    ctx.moveTo(start.x, start.y)
-    ctx.lineTo(end.x, end.y)
-    ctx.strokeStyle = (link.color as string) + 'aa'
-    ctx.lineWidth = 1.5
-    ctx.stroke()
-    const midX = (start.x + end.x) / 2
-    const midY = (start.y + end.y) / 2
+    // 标签位置：lineCanvasObjectMode='after' 时内置已画弧线（由 linkCurvature 控制），
+    // 我们只需把标签放在贝塞尔曲线 t=0.5 顶点。curvature=0 时退化为直线中点。
+    const curvature = link.curvature ?? 0
+    let textX: number, textY: number
+    if (curvature === 0) {
+      textX = (start.x + end.x) / 2
+      textY = (start.y + end.y) / 2
+    } else {
+      const dx = end.x - start.x
+      const dy = end.y - start.y
+      const length = Math.sqrt(dx * dx + dy * dy) || 1
+      // 控制点 = 中点 + 法向量 * (length * curvature * 0.5)
+      const nx = -dy / length
+      const ny = dx / length
+      const ctrlOffset = length * curvature * 0.5
+      const ctrlX = (start.x + end.x) / 2 + nx * ctrlOffset
+      const ctrlY = (start.y + end.y) / 2 + ny * ctrlOffset
+      // 二次贝塞尔 B(0.5) = 0.25*P0 + 0.5*P1 + 0.25*P2
+      textX = 0.25 * start.x + 0.5 * ctrlX + 0.25 * end.x
+      textY = 0.25 * start.y + 0.5 * ctrlY + 0.25 * end.y
+    }
     // 连线叠字：第一行 短标（关系类型），第二行 长 label（用户自定义）
     const shortTag = RELATION_LABELS[link.type] ?? link.type
     const longLabel = (link.label && link.label !== shortTag) ? link.label : ''
@@ -296,12 +311,12 @@ interface Props { width?: number; height?: number }
     // 第一行：短标（彩色）
     ctx.font = `bold ${tagFont}px PingFang SC, Microsoft YaHei, sans-serif`
     ctx.fillStyle = link.color
-    ctx.fillText(shortTag, midX, midY - tagFont * 0.6)
+    ctx.fillText(shortTag, textX, textY - tagFont * 0.6)
     // 第二行：长 label（灰色细字）
     if (longLabel) {
       ctx.font = `${lblFont}px PingFang SC, sans-serif`
       ctx.fillStyle = '#94a3b8'
-      ctx.fillText(longLabel.length > 14 ? longLabel.slice(0, 14) + '…' : longLabel, midX, midY + lblFont * 0.8)
+      ctx.fillText(longLabel.length > 14 ? longLabel.slice(0, 14) + '…' : longLabel, textX, textY + lblFont * 0.8)
     }
   }, [fontScale])
   return (
@@ -429,7 +444,10 @@ interface Props { width?: number; height?: number }
             nodeCanvasObjectMode={() => 'replace'}
             nodePointerAreaPaint={nodePointerAreaPaint}
             linkCanvasObject={drawLink}
-            linkCanvasObjectMode={() => 'replace'}
+            linkCanvasObjectMode={() => 'after'}
+            linkCurvature="curvature"
+            linkColor={(link: object) => ((link as GraphLink).color + 'aa')}
+            linkWidth={1.5}
             linkDirectionalArrowLength={(link: object) => ((link as GraphLink).bidirectional ? 0 : Math.max(3, 6))}
             linkDirectionalArrowRelPos={0.85}
             // 首帧稳定：后台预热 100 ticks，第一帧就是散开的最终形态
@@ -476,4 +494,23 @@ interface Props { width?: number; height?: number }
       </div>
     </div>
   )
+}
+// 给同一对端点的多条连线分配不同曲率，避免互相重叠（Gemini 推荐 pattern）
+function processLinks(links: GraphLink[]): GraphLink[] {
+  const groups = new Map<string, GraphLink[]>()
+  for (const link of links) {
+    const key = [link.source, link.target].sort().join('-')
+    const arr = groups.get(key)
+    if (arr) arr.push(link)
+    else groups.set(key, [link])
+  }
+  const step = 0.25
+  for (const group of groups.values()) {
+    const total = group.length
+    group.forEach((link, index) => {
+      // 奇数条时中间那条 curvature=0（直线），其他按 0.25 步长对称偏移
+      link.curvature = (index - (total - 1) / 2) * step
+    })
+  }
+  return links
 }

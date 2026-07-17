@@ -277,8 +277,8 @@ export default function CharacterRelationPanel({ project }: Props) {
 
       {/* 关系图视图 */}
       {view === 'graph' && (
-        <div className='h-[600px] min-h-[400px]'>
-          <RelationGraph width={graphWidth} height={600} />
+        <div className='h-[600px]'>
+          <RelationGraph />
         </div>
       )}
 

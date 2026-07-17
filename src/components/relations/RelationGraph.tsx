@@ -1,4 +1,4 @@
-import { useRef, useCallback, useMemo, useState, type ComponentRef } from 'react'
+ import { useRef, useCallback, useMemo, useState, useEffect, type ComponentRef } from 'react'
 import ForceGraph2D from 'react-force-graph-2d'
 
 type ForceGraphHandle = ComponentRef<typeof ForceGraph2D>
@@ -56,12 +56,27 @@ function getInitial(name: string): string {
 
 interface Props { width?: number; height?: number }
 
-export default function RelationGraph({ width: _initialWidth, height: _initialHeight }: Props) {
+ export default function RelationGraph({ width: _initialWidth, height: _initialHeight }: Props) {
+   const graphContainerRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<ForceGraphHandle | undefined>(undefined)
   const { characters } = useCharacterStore()
   const { relations } = useCharacterRelationStore()
   const [zoom, setZoom] = useState(1)
-  const [graphSize] = useState({ width: 700, height: 600 })
+   const [graphSize] = useState({ width: 700, height: 600 })
+   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+
+   // ResizeObserver: measure the flex container's actual pixel size
+   useEffect(() => {
+     if (!graphContainerRef.current) return
+     const observer = new ResizeObserver((entries) => {
+       const { width, height } = entries[0].contentRect
+       if (width > 0 && height > 0) {
+         setContainerSize({ width, height })
+       }
+     })
+     observer.observe(graphContainerRef.current)
+     return () => observer.disconnect()
+   }, [])
   const [fontScale, setFontScale] = useState(1)
 
 
@@ -253,12 +268,16 @@ export default function RelationGraph({ width: _initialWidth, height: _initialHe
       </div>
 
       {/* Graph 撑满 flex-1，min-h-0 让 flex 收缩生效 */}
-      <div className="flex-1 min-h-0" style={{ minHeight: 300 }}>
-        <ForceGraph2D
-          ref={graphRef}
-          graphData={graphData}
-          width={graphSize.width}
-          height={graphSize.height}
+       <div
+         ref={graphContainerRef}
+         className="flex-1 min-h-0"
+         style={{ minHeight: 300 }}
+       >
+         <ForceGraph2D
+           ref={graphRef}
+           graphData={graphData}
+           width={containerSize.width || graphSize.width}
+           height={containerSize.height || graphSize.height}
           backgroundColor="#0a0a0f"
           nodeCanvasObject={drawNode}
           nodeCanvasObjectMode={() => 'replace'}

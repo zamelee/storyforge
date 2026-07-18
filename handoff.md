@@ -204,3 +204,282 @@ family=亲属、lover=恋人、friend=朋友、rival=对手、enemy=敌人、mas
 ### 备份
 
 - `tmp/code-backups/RelationGraph.tsx.bak.2026-07-17T09-30-04` (16226 bytes, 378 行, 改动前的原版)
+
+
+---
+
+## RelationGraph 迭代 - 2026-07-17 (本次会话续 - 关系类型图例分段)
+
+### 用户要求
+
+- **Item 1**: 分段（所有关系类型） — 底部图例的"关系颜色图示"目前 10 种类型横铺，按语义分组分段展示
+- **Item 2**: 自动（按容器宽高） + 手动按钮 — 容器尺寸变化时自动 fit + 现有 FIT 按钮
+- 逐个推进，验证，多备份
+
+### Item 1 - 已完成 ✅
+
+#### 改动: `src/components/relations/RelationGraph.tsx`
+
+1. 新增常量 `RELATION_GROUPS`（line 47-54），按语义把 10 种关系类型分成 5 组：
+   - **情感关系**: family / lover / friend
+   - **冲突关系**: rival / enemy
+   - **师徒关系**: master / student
+   - **组织关系**: ally / subordinate
+   - **其他**: other
+2. 替换底部图例的"关系颜色图示"渲染（line 518-532）：
+   - 改为遍历 `RELATION_GROUPS`，每组渲染一个 `div` 块
+   - 段间用 `text-text-muted/40` 的 `|` 作为视觉分隔（select-none 防止误选）
+   - 段标题 `情感关系` 等用 `text-text-muted`
+   - 段内每种类型 = 色条 (`w-3 h-0.5`) + 中文标签
+3. 编码/行尾：UTF-8 无 BOM / CRLF（python 写入验证）
+4. 文件大小：26135 → 26927 bytes（+792）
+
+#### 验证
+
+- `npx tsc --noEmit` — 4 个 pre-existing 错误（stash 验证：改动前后错误完全相同，行号偏移 = 我新增 8 行）
+  - `CharacterRelationPanel.tsx(36,10)`: graphWidth 未用
+  - `RelationGraph.tsx(39,7)`: MORAL_COLOR 未用
+  - `RelationGraph.tsx(238,11)`: moral 未用
+  - `RelationGraph.tsx(500,13)`: minimap prop 类型（react-force-graph-2d 类型定义缺失）
+  - 不在本次任务范围，未修改
+- `npm run build` — 同上 4 个 TS 错误，Vite dev 正常（HMR 已生效）
+- 浏览器实测（Chrome DevTools MCP, 端口 999）：
+  - 页面 HMR 后正常渲染
+  - 底部图例显示：`角色颜色图示: ●主要 ●次要 ●NPC ●路人` / `关系颜色图示: 情感关系 ── 亲属 恋人 朋友 | 冲突关系 ── 对手 敌人 | 师徒关系 ── 师父 弟子 | 组织关系 ── 盟友 上下级 | 其他 ── 其他`
+  - 控制台 1 个 pre-existing error（`Cannot update a component (RelationGraph) while rendering ForceGraph2D`），stash 验证 = pre-existing
+- HMR 没有重启服务（端口 999 一直 HMR）
+
+#### 备份
+
+- `tmp/code-backups/RelationGraph.tsx.bak.2026-07-17T18-14-51` (26135 bytes, 写入前的版本)
+
+#### git 状态
+
+- 当前 `git diff HEAD`: 49 insertions, 8 deletions（含之前 segmented bar 未提交的改动 + 新的图例分段）
+- `git status`: modified `src/components/relations/RelationGraph.tsx`
+- **未 commit，等用户决定 commit 时机**（按全局规则）
+
+### Item 2 - 待办
+
+- 容器尺寸变化时自动调用 `zoomToFit()`
+- FIT 手动按钮保持不变
+- 不在初次 mount 时 fit（FIT 不要默认启用）
+- 实现方向：在已有的 ResizeObserver 中追加 `zoomToFit()` 调用，加防抖
+
+### 临时文件清理待批准（按全局规则 §7）
+
+- `_probe_lines.py`, `_patch_legend.py`, `_verify_encoding.py` - 本次写补丁脚本时的临时脚本
+- `tmp/code-backups/RelationGraph.tsx.bak.2026-07-17T18-00-32` (23192 bytes) - 前一会话备份
+- `tmp/code-backups/RelationGraph.tsx.bak.2026-07-17T18-10-19` (24993 bytes) - 前一会话备份
+- 保留建议：只保留本次 Item 1 的 pre-write 备份 `18-14-51` 和前一会话手动拖动调试的 `09-30-04`，删除 2 个中间备份 + 3 个 _*.py 脚本
+
+
+---
+
+## RelationGraph 迭代 - 2026-07-17 (本次会话续 - Item 2 自动 fit + 手动按钮)
+
+### Item 2 - 已完成 ✅
+
+#### 用户需求
+
+- 容器尺寸变化时自动 fit（按容器宽高计算）
+- FIT 手动按钮保留作为 override
+- FIT 不要默认启用（不在初次 mount 时 fit）
+- 逐个推进，验证，多备份
+
+#### 改动: `src/components/relations/RelationGraph.tsx` (line 75-110)
+
+增强 ResizeObserver 回调：
+
+```ts
+useEffect(() => {
+  const container = graphContainerRef.current;
+  const fg = graphRef.current;
+  if (!container || !fg) return;
+  // 跳过首次触发（observe() 同步触发一次），符合 FIT 不要默认启用
+  let firstFire = true;
+  let fitDebounce: number | undefined;
+  const ro = new ResizeObserver(() => {
+    // ... 已有 canvas resize + reheat ...
+    if (firstFire) {
+      firstFire = false;
+      return;
+    }
+    // 250ms debounce: window drag / panel toggle 会触发多次 resize，等动作停下再 fit 一次
+    clearTimeout(fitDebounce);
+    fitDebounce = window.setTimeout(() => {
+      graphRef.current?.zoomToFit(400, 40);
+    }, 250);
+  });
+  ro.observe(container);
+  return () => {
+    clearTimeout(fitDebounce);
+    ro.disconnect();
+  };
+}, [])
+```
+
+设计要点：
+
+- **firstFire 跳过初次 mount**：observe() 同步触发一次 ResizeObserver，但跳过 zoomToFit。布局初始化时的 fit 由已有的 `[layoutMode, graphData]` effect 处理（不在 ResizeObserver 责任范围）。
+- **250ms debounce**：window drag、侧栏折叠/展开、属性面板 toggle 都会短时间内触发多次 resize，debounce 等动作稳定后再 fit 一次，避免抖动。
+- **400ms transition + 40px padding**：与手动 FIT 按钮保持一致 `zoomToFit(400, 40)`。
+- **cleanup 完整**：组件卸载时 clearTimeout + ro.disconnect()，避免内存泄漏。
+
+#### 验证
+
+- `npx tsc --noEmit` — 4 个 pre-existing 错误未新增（行号偏移 +16 = 新增 16 行）
+- `npm run build` — 同上
+- 浏览器实测（Chrome DevTools MCP, 端口 999, 999 + HMR）：
+  - 初次加载：图自适应，不触发额外 fit（firstFire 跳过） ✅
+  - 点击"折叠侧边栏"：侧栏变窄，容器宽度变化，250ms 后图自动 fit ✅
+  - 点击"展开侧边栏"：容器变窄，自动 fit ✅
+  - 点击 FIT 手动按钮：仍然有效，作为 override ✅
+  - 控制台 1 个 pre-existing error（stash 验证：未引入新错误）
+
+#### 备份
+
+- `tmp/code-backups/RelationGraph.tsx.bak.2026-07-17T18-22-45` (Item 2 写入前的版本，含 Item 1 + segmented bar)
+
+#### 本次会话汇总
+
+| 备份文件 | 大小 | 内容 |
+|---|---|---|
+| `RelationGraph.tsx.bak.2026-07-17T09-30-04` | 17096 | 前一会话起点（无 segmented bar / 无 Item 1） |
+| `RelationGraph.tsx.bak.2026-07-17T18-14-51` | 26135 | Item 1 写入前（已有 segmented bar） |
+| `RelationGraph.tsx.bak.2026-07-17T18-22-45` | 26927 | Item 2 写入前（Item 1 完成态） |
+| **当前 working tree** | 27573 | Item 1 + Item 2 完整态 |
+
+#### 待清理（按全局规则 §7，需用户批准）
+
+- `_probe_lines.py`, `_patch_legend.py`, `_verify_encoding.py`, `_verify2.py`, `_patch_resize.py`, `_append_handoff.py`, `_append_handoff2.py` - 临时补丁脚本
+- `tmp/code-backups/RelationGraph.tsx.bak.2026-07-17T18-00-32` (23192) - 中间备份
+- `tmp/code-backups/RelationGraph.tsx.bak.2026-07-17T18-10-19` (24993) - 中间备份
+- 保留建议：保留 `09-30-04`（前一会话起点）和 `22-45`（Item 2 写入前），其它可清理
+
+### 下一步可考虑
+
+- **force 模式拖动 + 锁定**：用户手动验证（Chrome DevTools MCP 无 mouse-drag 工具），⟳ 按钮在拖动节点后应 enable
+- **td 布局 zoomToFit 节点聚集**：之前 handoff 已记录，可手动 `centerAt + zoom` 或问 Gemini 优化方案
+- **AI 提取关系**：在 CharacterRelationPanel 顶部有"AI 提取"按钮，可触发全图批量关系抽取
+
+
+
+## Session 2026-07-18: 4 项问题一次性修复（Gemini 9122a8b22405cdbe 完谈回复后）
+
+### 前情
+- 前一会话做了 2 项：图例 5 段语义分组（Item 1）+ ResizeObserver 自动 zoomToFit（Item 2）
+- 本次会话基于 Gemini 完谈后的 4 个根因分析 + 实测验证,逐项 + 一次性修复剩下的 4 个问题
+
+### 修复清单 (本次会话)
+
+| 项 | 改动 | Gemini 建议 | 采纳 |
+|---|---|---|---|
+| Item 4 | fontScale → nodeFontSize(6–24px) + linkFontSize(5–16px),UI 层不动 | 直接用 px 不用 ratio | **方案 B 完全采纳**(2 state 像素) |
+| Item 1 | processLinks 加方向感知 (isReversed 翻转 curvature) + step 0.25→0.3 | step ≤ 0.35 | **A + B**:isReversed ? -base : base,step=0.3 |
+| Item 3 | 右上角工具条 flex flex-col items-end gap-2 | flex-col 垂直堆叠 | **完整采纳**:字号卡(2 滑杆)/ ⟳ / 缩放按钮组 各一行 |
+| Item 2 | 中键 pan:自接管 middle button,调 centerAt(0,0 直接 set) | React 事件 + centerAt | **完整采纳**:graphContainerRef.mousedown + window.mousemove/mouseup |
+
+### 关键文件改动
+
+#### Item 4 - 字号改造
+- `LS_FONT` → 删除,新增 `LS_NODE_FONT='sf_relationgraph_node_font'`(默认 12) + `LS_LINK_FONT='sf_relationgraph_link_font'`(默认 10)
+- drawNode (avatarR / fontSize / subFontSize) 全部从 fontScale 换成 nodeFontSize (px 直存)
+- drawLink (tagFont / lblFont) 全部从 fontScale 换成 linkFontSize
+- nodePointerAreaPaint 命中半径 = `nodeFontSize * 3.8` (替代 `18 + 14*fontScale + 14*fontScale`)
+- UI 层 (legend / toolbar / minimap) 一律不动 — 符合"操作系统的无障碍设置管辖 UI 层"
+
+#### Item 1 - 方向感知曲率
+- 老的 processLinks: `(index - (total-1)/2) * 0.25` 对称分布
+- 新的 processLinks:
+  ```ts
+  const baseCurvature = (index - (total - 1) / 2) * step
+  const isReversed = link.source > link.target
+  link.curvature = isReversed ? -baseCurvature : baseCurvature
+  ```
+- step 从 0.25 调到 0.3 (Gemini 说 0.4+ 会让外侧边呈半圆形,0.3 是不错的折中)
+- 注意:link.source 和 link.target 此时是 string id,不是 PositionedNode (这一步在 processLinks 里跑,ForceGraph2D 还没接管)
+
+#### Item 3 - 右上角 flex-col 垂直控制台
+- 老结构: 横向 `flex items-center gap-2` = [节点字号卡] [⟳] [+/-/FIT 列]
+- 新结构: 垂直 `flex flex-col items-end gap-2`
+  - 字号卡 (内部 flex-col:节点 + 连线 各一行滑杆,自带 backdrop-blur)
+  - ⟳ 重置按钮 (独立一行)
+  - 缩放按钮组 + / - / FIT (独立一组)
+- 每条滑杆前的小图标: 节 / 连,方便区分
+- 字号显示: `{nodeFontSize}px` / `{linkFontSize}px` (从原 % 改为 px)
+
+#### Item 2 - 中键 pan
+- 看了 force-graph.mjs:1218 centerAt() 无参为 getter 返回 {x, y},有参为 setter
+- graph.mjs:1258 zoom() 同样支持 getter/setter
+- 新增 useEffect (跟随第一个 useEffect,在 ResizeObserver 之后):
+  ```ts
+  useEffect(() => {
+    const el = graphContainerRef.current
+    if (!el) return
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 1) return
+      e.preventDefault()
+      isPanning.current = true
+      lastPanPoint.current = { x: e.clientX, y: e.clientY }
+    }
+    const onMove = (e: MouseEvent) => {
+      if (!isPanning.current || !graphRef.current) return
+      const currentZoom = graphRef.current.zoom()
+      const dx = e.clientX - lastPanPoint.current.x
+      const dy = e.clientY - lastPanPoint.current.y
+      const center = graphRef.current.centerAt()
+      if (!center) return
+      graphRef.current.centerAt(center.x - dx / currentZoom, center.y - dy / currentZoom)
+      lastPanPoint.current = { x: e.clientX, y: e.clientY }
+    }
+    const onUp = (e: MouseEvent) => {
+      if (e.button !== 1) return
+      isPanning.current = false
+    }
+    el.addEventListener('mousedown', onDown)
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      el.removeEventListener('mousedown', onDown)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+  ```
+- 加了 2 个 ref: `isPanning`, `lastPanPoint`(都是 useRef,不会引发重渲染)
+- graphContainerRef div 加 `onMouseDown={e => { if (e.button === 1) e.preventDefault() }}` 防止浏览器 autoscroll
+
+### TypeScript 验证
+- `npx tsc --noEmit` 仍为 4 个 pre-existing 错误(未新增):
+  - CharacterRelationPanel.tsx:36 `graphWidth` unused
+  - RelationGraph.tsx:40 `MORAL_COLOR` unused
+  - RelationGraph.tsx:297 `moral` unused
+  - RelationGraph.tsx:585 `minimap` 不在 ForceGraphProps 类型里 (v1.29.1 类型不全)
+- 1 个 pre-existing console warning: `onZoom` setState during render (line 287),与本次改动无关
+
+### 浏览器实测 (Chrome MCP, page 7, localhost:999)
+- 关系图正常渲染,8 节点 29 关系全部可见
+- localStorage 已建立新 key: `sf_relationgraph_node_font=12`, `sf_relationgraph_link_font=10`
+- 旧 key `sf_relationgraph_font=0.77` 仍残留 (新代码不读它,可手动 clear 或保留作废)
+- 右上工具条:`节 12px` / `连 10px` / ⟳ / + / - / FIT,各行垂直排列 ✅
+- 中键 pan:无 GUI 测试手段 (chrome-devtools MCP 无 mouse-down),需用户手测
+
+### 残留问题 (不重要但需注意)
+- 沈见微 出去的边标签 (敌人/对手/朋友/恋人/亲属) 仍有少量视觉重叠 — 这是 `多条边汇聚到同一源点` 的物理几何限制,与 curvature 无关 (curvature 只调本对的反向,A→B 与 B→A),Item 1 治的是"同一对两端点的多条平行边"重叠。真正要解决需改 drawLink 让不同组边 t 偏移不同 (t = 0.4 + 0.2 * groupIdx)
+- legend `其他` 出现两次 (其他分组 + 其他 type,文字一致),这是显示问题,不在本次范围
+
+### 备份
+- `tmp/code-backups/RelationGraph.tsx.bak.2026-07-18T09-55-25` = 本次 4 项修改前起点 (27573 bytes)
+- 当前 working tree = 28232 bytes
+
+### 临时脚本 (待清理,需用户批准)
+- tmp/_patch_item4.py - Item 4 主补丁 (LS key + state hooks + drawNode/drawLink + slider)
+- tmp/_patch_item4b.py - Item 4 收尾 (清残留 fontScale 注释 + span 缩进)
+- tmp/_patch_item1.py - Item 1 processLinks 方向感知
+- tmp/_patch_item3.py - Item 3 右上工具条 flex-col 重排
+- tmp/_patch_item2.py - Item 2 中键 pan useEffect
+- 前一会话残留: _probe_lines.py / _patch_legend.py / _verify_encoding.py / _verify2.py / _patch_resize.py / _append_handoff.py / _append_handoff2.py
+- 旧备份可清: bak.2026-07-17T18-00-32, bak.2026-07-17T18-10-19 (中间版本,功能已被新版覆盖)
+- 保留建议: bak.09-30-04 (前一会话起点) + bak.2026-07-17T22-45 (Item 2 写入前) + bak.2026-07-18T09-55-25 (本次起点)
+

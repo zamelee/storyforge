@@ -15,3 +15,12 @@ coverage/
 # Local scratch / debug artifacts
 .tmp/
 
+
+# Temp patch / debug scripts (underscore-prefixed)
+_*.py
+_*.js
+_*.ps1
+_*.txt
+
+# Single-write code backups (one per modification cycle)
+tmp/code-backups/

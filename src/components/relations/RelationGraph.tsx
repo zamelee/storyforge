@@ -17,7 +17,8 @@ const LAYOUT_OPTIONS: { key: LayoutMode; label: string; title: string }[] = [
 ]
 const LS_LAYOUT = 'sf_relationgraph_layout'
 const LS_LEVEL  = 'sf_relationgraph_level'
-const LS_FONT   = 'sf_relationgraph_font'
+const LS_NODE_FONT = 'sf_relationgraph_node_font'
+const LS_LINK_FONT = 'sf_relationgraph_link_font'
 function loadLS<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v == null ? fallback : (JSON.parse(v) as T) }
   catch { return fallback }
@@ -44,6 +45,14 @@ const RELATION_LABELS: Record<string, string> = {
   enemy:'敌人', master:'师父', student:'弟子', ally:'盟友',
   subordinate:'上下级', other:'其他',
 }
+// 关系类型按语义分组（图例分段展示，所有 10 种类型均覆盖）
+const RELATION_GROUPS: { title: string; types: string[] }[] = [
+  { title: '情感关系', types: ['family', 'lover', 'friend'] },
+  { title: '冲突关系', types: ['rival', 'enemy'] },
+  { title: '师徒关系', types: ['master', 'student'] },
+  { title: '组织关系', types: ['ally', 'subordinate'] },
+  { title: '其他',     types: ['other'] },
+]
 // 角色戏份标签
 const ROLE_WEIGHT_LABEL: Record<string, string> = {
   main: '主要', secondary: '次要', npc: 'NPC', extra: '路人',
@@ -52,7 +61,7 @@ const ROLE_WEIGHT_LABEL: Record<string, string> = {
 const ROLE_WEIGHT_BG: Record<string, string> = {
   main: '#3b82f6', secondary: '#f59e0b', npc: '#8b5cf6', extra: '#6b7280',
 }
-interface GraphNode { id: string; name: string; role: string; color: string; fx?: number; fy?: number }
+interface GraphNode { id: string; name: string; role: string; color: string; fx?: number; fy?: number; relationColors?: string[] }
 interface GraphLink {
   source: string; target: string; type: string
   bidirectional: boolean; label: string; color: string; curvature?: number
@@ -65,10 +74,14 @@ function getInitial(name: string): string {
 interface Props { width?: number; height?: number }
  export default function RelationGraph({ width: _initialWidth, height: _initialHeight }: Props) {
   // ResizeObserver: dynamic canvas resize, avoid ForceGraph2D remount
+  // 容器尺寸变化时自动 zoomToFit（debounced），并保留 FIT 手动按钮作为 override
   useEffect(() => {
     const container = graphContainerRef.current;
     const fg = graphRef.current;
     if (!container || !fg) return;
+    // 跳过首次触发（observe() 同步触发一次），符合 FIT 不要默认启用
+    let firstFire = true;
+    let fitDebounce: number | undefined;
     const ro = new ResizeObserver(() => {
       const w = container.clientWidth;
       const h = container.clientHeight;
@@ -80,17 +93,68 @@ interface Props { width?: number; height?: number }
         (fg as any).renderer?.resize?.(w, h);
         (fg as any).d3ReheatSimulation?.();
       }
+      if (firstFire) {
+        firstFire = false;
+        return;
+      }
+      // 250ms debounce: window drag / panel toggle 会触发多次 resize，等动作停下再 fit 一次
+      clearTimeout(fitDebounce);
+      fitDebounce = window.setTimeout(() => {
+        graphRef.current?.zoomToFit(400, 40);
+      }, 250);
     });
     ro.observe(container);
-    return () => ro.disconnect();
+    return () => {
+      clearTimeout(fitDebounce);
+      ro.disconnect();
+    };
+  }, [])
+  // 中键 pan：react-force-graph 内部 d3-zoom filter 强制 !ev.button（非左键一律拒绝），
+  // 这里自接管 middle button，调 centerAt 偏移图心。
+  // centerAt() 无参为 getter 返回 {x, y} 当前位置；centerAt(x, y) 直接 set，无 transitionMs。
+  useEffect(() => {
+    const el = graphContainerRef.current;
+    if (!el) return;
+    const onDown = (e: MouseEvent) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      isPanning.current = true;
+      lastPanPoint.current = { x: e.clientX, y: e.clientY };
+    };
+    const onMove = (e: MouseEvent) => {
+      if (!isPanning.current || !graphRef.current) return;
+      const currentZoom = graphRef.current.zoom();
+      const dx = e.clientX - lastPanPoint.current.x;
+      const dy = e.clientY - lastPanPoint.current.y;
+      const center = graphRef.current.centerAt();
+      if (!center) return;
+      graphRef.current.centerAt(center.x - dx / currentZoom, center.y - dy / currentZoom);
+      lastPanPoint.current = { x: e.clientX, y: e.clientY };
+    };
+    const onUp = (e: MouseEvent) => {
+      if (e.button !== 1) return;
+      isPanning.current = false;
+    };
+    el.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      el.removeEventListener('mousedown', onDown);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
   }, [])
   const graphContainerRef = useRef<HTMLDivElement>(null)
   const graphRef = useRef<ForceGraphHandle | undefined>(undefined)
+  // 中键 pan 状态（不引发重渲染）
+  const isPanning = useRef(false)
+  const lastPanPoint = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
   const { characters } = useCharacterStore()
   const { relations } = useCharacterRelationStore()
   const [zoom, setZoom] = useState(1)
   const [measureRef, bounds] = useMeasure()
-  const [fontScale, setFontScale] = useState<number>(() => loadLS<number>(LS_FONT, 1))
+  const [nodeFontSize, setNodeFontSize] = useState<number>(() => loadLS<number>(LS_NODE_FONT, 12))
+  const [linkFontSize, setLinkFontSize] = useState<number>(() => loadLS<number>(LS_LINK_FONT, 10))
   // 布局模式（持久化）
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => loadLS<LayoutMode>(LS_LAYOUT, null))
   const [levelDistance, setLevelDistance] = useState<number>(() => loadLS<number>(LS_LEVEL, 120))
@@ -103,6 +167,20 @@ interface Props { width?: number; height?: number }
   useEffect(() => {
     setGraphData(prev => {
       const oldById = new Map(prev.nodes.map(n => [n.id, n]))
+      // 预先收集每个角色涉及的关系类型颜色（去重、保持首次出现顺序），
+      // 给节点顶部“分段色条”使用
+      const colorsByChar = new Map<string, string[]>()
+      for (const r of relations) {
+        const c = RELATION_COLORS[r.relationType] ?? '#6b7280'
+        for (const id of [String(r.fromCharacterId), String(r.toCharacterId)]) {
+          const arr = colorsByChar.get(id)
+          if (arr) {
+            if (!arr.includes(c)) arr.push(c)
+          } else {
+            colorsByChar.set(id, [c])
+          }
+        }
+      }
       const nodes: GraphNode[] = characters.map(c => {
         const id = String(c.id)
         const old = oldById.get(id)
@@ -111,6 +189,7 @@ interface Props { width?: number; height?: number }
           name: c.name,
           role: `${c.roleWeight}/${c.orderAxis}/${c.moralAxis}`,
           color: moralAxisColor(c.moralAxis),
+          relationColors: colorsByChar.get(id) ?? [],
           fx: old?.fx,
           fy: old?.fy,
         }
@@ -150,8 +229,11 @@ interface Props { width?: number; height?: number }
   }, [levelDistance])
   // 字号持久化
   useEffect(() => {
-    try { localStorage.setItem(LS_FONT, JSON.stringify(fontScale)) } catch {}
-  }, [fontScale])
+    try { localStorage.setItem(LS_NODE_FONT, JSON.stringify(nodeFontSize)) } catch {}
+  }, [nodeFontSize])
+  useEffect(() => {
+    try { localStorage.setItem(LS_LINK_FONT, JSON.stringify(linkFontSize)) } catch {}
+  }, [linkFontSize])
   // 每个角色的关系计数
   const relCountMap = useMemo(() => {
     const m = new Map<string, number>()
@@ -207,7 +289,7 @@ interface Props { width?: number; height?: number }
   const handleZoomToFit = useCallback(() => {
     graphRef.current?.zoomToFit(400, 40)
   }, [])
-  // 字体大小由 fontScale 独立控制（不受 globalScale 影响）
+  // 节点与连线字号分别控制（不受 globalScale 影响）
   const drawNode = useCallback((rawNode: unknown, ctx: CanvasRenderingContext2D, _globalScale: number) => {
     const node = rawNode as PositionedNode
     const char = characters.find(c => String(c.id) === node.id)
@@ -215,9 +297,9 @@ interface Props { width?: number; height?: number }
     const moral = char?.moralAxis ?? 'neutral'
     const count = relCountMap.get(node.id) ?? 0
     const padX = 4, padY = 2
-    const avatarR = Math.max(5, 14 * fontScale)
-    const fontSize = Math.max(7, 11 * fontScale)
-    const subFontSize = Math.max(5, 8 * fontScale)
+    const avatarR = Math.max(6, nodeFontSize * 1.4)
+    const fontSize = Math.max(6, nodeFontSize)
+    const subFontSize = Math.max(5, nodeFontSize * 0.78)
     ctx.font = `${fontSize}px PingFang SC, Microsoft YaHei, sans-serif`
     const nameW = ctx.measureText(node.name).width
     ctx.font = `${subFontSize}px PingFang SC, sans-serif`
@@ -234,13 +316,23 @@ interface Props { width?: number; height?: number }
     ctx.fill()
     // 仅保留顶部阵营色条（去掉外框线，色条就是该角色的阵营标签）
     const barH = 2.5
-    ctx.fillStyle = MORAL_COLOR[moral] ?? '#94a3b8'
-    ctx.fillRect(x, y, cardW, barH)
+    // 顶部关系类型分段色条（Segmented Bar）
+    const relColors = node.relationColors ?? []
+    if (relColors.length > 0) {
+      const segGap = 0.5
+      const totalGap = segGap * Math.max(0, relColors.length - 1)
+      const segW = Math.max(1, (cardW - totalGap) / relColors.length)
+      relColors.forEach((c, i) => {
+        ctx.fillStyle = c
+        ctx.fillRect(x + i * (segW + segGap), y, segW, barH)
+      })
+    }
     const cx = node.x
     // 头像圆
     ctx.beginPath()
     ctx.arc(cx, y + padY + avatarR, avatarR, 0, 2 * Math.PI)
-    ctx.fillStyle = (MORAL_COLOR[moral] ?? '#94a3b8')
+    // 头像圆：使用角色戏份色（主要/次要/NPC/路人），与色条语义分工
+    ctx.fillStyle = ROLE_WEIGHT_BG[roleWeight] ?? '#3b82f6'
     ctx.fill()
     ctx.strokeStyle = 'rgba(255,255,255,0.25)'
     ctx.lineWidth = 1
@@ -265,16 +357,16 @@ interface Props { width?: number; height?: number }
       ctx.fillStyle = '#64748b'
       ctx.fillText(`${count}条关系`, cx, y + padY + avatarR * 2 + fontSize + subFontSize * 2)
     }
-  }, [characters, relCountMap, fontScale])
+  }, [characters, relCountMap, nodeFontSize])
   // 增大节点点击/拖拽响应区：用一个隐形大圆覆盖视觉卡片，避免边缘拖不到
   const nodePointerAreaPaint = useCallback((rawNode: unknown, color: string, ctx: CanvasRenderingContext2D) => {
     const node = rawNode as PositionedNode
-    const r = Math.max(30, 18 + 14 * fontScale + 14 * fontScale)
+    const r = Math.max(30, nodeFontSize * 3.8)
     ctx.fillStyle = color
     ctx.beginPath()
     ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
     ctx.fill()
-  }, [fontScale])
+  }, [linkFontSize])
   const drawLink = useCallback((rawLink: unknown, ctx: CanvasRenderingContext2D, _globalScale: number) => {
     const link = rawLink as PositionedLink
     const start = link.source
@@ -304,8 +396,8 @@ interface Props { width?: number; height?: number }
     // 连线叠字：第一行 短标（关系类型），第二行 长 label（用户自定义）
     const shortTag = RELATION_LABELS[link.type] ?? link.type
     const longLabel = (link.label && link.label !== shortTag) ? link.label : ''
-    const tagFont = Math.max(7, 9 * fontScale)
-    const lblFont = Math.max(6, 7 * fontScale)
+    const tagFont = Math.max(5, linkFontSize)
+    const lblFont = Math.max(4, linkFontSize * 0.78)
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     // 第一行：短标（彩色）
@@ -318,7 +410,7 @@ interface Props { width?: number; height?: number }
       ctx.fillStyle = '#94a3b8'
       ctx.fillText(longLabel.length > 14 ? longLabel.slice(0, 14) + '…' : longLabel, textX, textY + lblFont * 0.8)
     }
-  }, [fontScale])
+  }, [linkFontSize])
   return (
     <div className="rounded-lg overflow-hidden border border-border bg-bg-base relative flex flex-col h-full">
       {characters.length === 0 && (
@@ -384,22 +476,40 @@ interface Props { width?: number; height?: number }
           </div>
         )}
       </div>
-      {/* 右上角：字体滑杆 + 重置布局 + 缩放按钮 */}
-      <div className="absolute top-2 right-2 flex items-center gap-2 z-20">
-        {/* 字体大小滑杆（1%–100%） */}
-        <div className="flex items-center gap-1.5 bg-bg-base/80 border border-border rounded px-2 py-1 backdrop-blur">
-          <span className="text-xs text-text-muted" title="节点与连线上的字号缩放">字</span>
-          <input
-            type="range"
-            min={0.01}
-            max={1.0}
-            step={0.01}
-            value={Math.round(fontScale * 100) / 100}
-            onChange={e => setFontScale(parseFloat(e.target.value))}
-            className="w-20 h-1 accent-accent cursor-pointer"
-            title={`字号: ${Math.round(fontScale * 100)}%`}
-          />
-          <span className="text-xs text-text-muted w-8 text-right">{Math.round(fontScale * 100)}%</span>
+      {/* 右上角：浮动垂直控制台 (Floating Action Column)
+          - Gemini 推荐 pattern：flex-col 垂直堆叠，避免与中部布局栏横向冲突
+          - 字号卡（节点 + 连线 2 滑杆）/ 重置按钮 / 缩放按钮组 各占一行 */}
+      <div className="absolute top-2 right-2 flex flex-col items-end gap-2 z-20">
+        {/* 字号卡：节点 + 连线 2 条滑杆垂直排列，独立可调 */}
+        <div className="flex flex-col gap-1.5 bg-bg-base/80 border border-border rounded px-2 py-1.5 backdrop-blur">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-text-muted w-6" title="节点卡片字号（角色名/戏份/关系数）">节</span>
+            <input
+              type="range"
+              min={6}
+              max={24}
+              step={1}
+              value={nodeFontSize}
+              onChange={e => setNodeFontSize(parseInt(e.target.value))}
+              className="w-20 h-1 accent-accent cursor-pointer"
+              title={`节点字号: ${nodeFontSize}px`}
+            />
+            <span className="text-xs text-text-muted w-8 text-right">{nodeFontSize}px</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-text-muted w-6" title="连线标签字号（关系短标/长标签）">连</span>
+            <input
+              type="range"
+              min={5}
+              max={16}
+              step={1}
+              value={linkFontSize}
+              onChange={e => setLinkFontSize(parseInt(e.target.value))}
+              className="w-20 h-1 accent-accent cursor-pointer"
+              title={`连线字号: ${linkFontSize}px`}
+            />
+            <span className="text-xs text-text-muted w-8 text-right">{linkFontSize}px</span>
+          </div>
         </div>
         {/* 重置布局：解锁所有已拖动节点，让物理引擎重新接管 */}
         <button
@@ -433,7 +543,11 @@ interface Props { width?: number; height?: number }
         className="flex-1 min-h-0"
         style={{ minHeight: 300 }}
       >
-        <div ref={graphContainerRef} className="w-full h-full">
+        <div
+          ref={graphContainerRef}
+          className="w-full h-full"
+          onMouseDown={e => { if (e.button === 1) e.preventDefault() }}
+        >
           <ForceGraph2D
             ref={graphRef}
             graphData={graphData}
@@ -484,10 +598,16 @@ interface Props { width?: number; height?: number }
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="text-text-muted">关系颜色图示：</span>
-          {Object.entries(RELATION_COLORS).map(([key, color]) => (
-            <div key={key} className="flex items-center gap-1 text-text-muted">
-              <span className="w-3 h-0.5 inline-block rounded" style={{ backgroundColor: color }} />
-              {RELATION_LABELS[key]}
+          {RELATION_GROUPS.map((group, idx) => (
+            <div key={group.title} className="flex items-center gap-1.5">
+              {idx > 0 && <span className="text-text-muted/40 select-none">|</span>}
+              <span className="text-text-muted">{group.title}</span>
+              {group.types.map(key => (
+                <div key={key} className="flex items-center gap-1 text-text-muted">
+                  <span className="w-3 h-0.5 inline-block rounded" style={{ backgroundColor: RELATION_COLORS[key] ?? '#6b7280' }} />
+                  {RELATION_LABELS[key] ?? key}
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -504,13 +624,20 @@ function processLinks(links: GraphLink[]): GraphLink[] {
     if (arr) arr.push(link)
     else groups.set(key, [link])
   }
-  const step = 0.25
+  // Gemini 推荐 pattern：以 sortedId 为基准方向，反向边翻转 curvature 符号，
+  // 这样同向边曲率符号一致、不同向边自然落在不同侧，避免反向边的文字 t=0.5 重叠
+  const step = 0.3
   for (const group of groups.values()) {
     const total = group.length
     group.forEach((link, index) => {
-      // 奇数条时中间那条 curvature=0（直线），其他按 0.25 步长对称偏移
-      link.curvature = (index - (total - 1) / 2) * step
+      // 基础偏移（对称分布）
+      const baseCurvature = (index - (total - 1) / 2) * step
+      // 方向感知：link.source 是字符 id，与 sorted 后的较大值比较
+      const isReversed = link.source > link.target
+      link.curvature = isReversed ? -baseCurvature : baseCurvature
     })
   }
   return links
 }
+
+

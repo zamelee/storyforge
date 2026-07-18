@@ -112,7 +112,7 @@ export default function CharacterRelationPanel({ project }: Props) {
   const projectRelations = relations.filter((r) => r.projectId === projectId)
 
   return (
-    <div className={view === 'graph' ? "w-full space-y-4 flex flex-col h-[calc(100vh-180px)]" : "max-w-4xl mx-auto space-y-6"} ref={containerRef}>
+    <div className={view === 'graph' ? "w-full space-y-4 flex flex-col min-h-[calc(100vh-180px)]" : "max-w-4xl mx-auto space-y-6"} ref={containerRef}>
       {/* 标题 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
@@ -277,7 +277,7 @@ export default function CharacterRelationPanel({ project }: Props) {
 
       {/* 关系图视图 */}
       {view === 'graph' && (
-        <div className='flex-1 min-h-[500px]'>
+        <div className='flex flex-col flex-1 min-h-0'>
           <RelationGraph />
         </div>
       )}

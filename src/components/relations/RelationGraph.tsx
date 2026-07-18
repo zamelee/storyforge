@@ -5,6 +5,7 @@ type ForceGraphHandle = ComponentRef<typeof ForceGraph2D>
 import { useCharacterRelationStore } from '../../stores/character-relation'
 import { useCharacterStore } from '../../stores/character'
 import { moralAxisColor } from '../../lib/character/character-axes'
+import { Settings, Maximize2 } from 'lucide-react'
 // 布局模式（react-force-graph 原生 dagMode）
 type LayoutMode = null | 'radialout' | 'radialin' | 'td' | 'bu' | 'lr'
 const LAYOUT_OPTIONS: { key: LayoutMode; label: string; title: string }[] = [
@@ -19,6 +20,7 @@ const LS_LAYOUT = 'sf_relationgraph_layout'
 const LS_LEVEL  = 'sf_relationgraph_level'
 const LS_NODE_FONT = 'sf_relationgraph_node_font'
 const LS_LINK_FONT = 'sf_relationgraph_link_font'
+const LS_FIT_MODE = 'sf_relationgraph_fit_mode'
 function loadLS<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v == null ? fallback : (JSON.parse(v) as T) }
   catch { return fallback }
@@ -100,7 +102,35 @@ interface Props { width?: number; height?: number }
       // 250ms debounce: window drag / panel toggle 会触发多次 resize，等动作停下再 fit 一次
       clearTimeout(fitDebounce);
       fitDebounce = window.setTimeout(() => {
-        graphRef.current?.zoomToFit(400, 40);
+        if (fitModeRef.current === 'cover') {
+          // inline cover 计算：手算包围盒 + max(scaleX, scaleY)
+          const fg = graphRef.current as unknown as {
+            centerAt: (x?: number, y?: number, ms?: number) => unknown
+            zoom: (k?: number, ms?: number) => unknown
+          } | undefined
+          const c = graphContainerRef.current
+          const ns = (graphDataRef.current?.nodes ?? []) as Array<{ x?: number; y?: number }>
+          const ps = ns.filter(n => typeof n.x === 'number' && typeof n.y === 'number')
+          if (fg && c && ps.length > 0) {
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+            for (const n of ps) {
+              if (n.x! < minX) minX = n.x!
+              if (n.x! > maxX) maxX = n.x!
+              if (n.y! < minY) minY = n.y!
+              if (n.y! > maxY) maxY = n.y!
+            }
+            const pad = 60
+            const gw = Math.max(1, (maxX - minX) + pad * 2)
+            const gh = Math.max(1, (maxY - minY) + pad * 2)
+            const cw = Math.max(1, c.clientWidth)
+            const ch = Math.max(1, c.clientHeight)
+            const ts = Math.max(cw / gw, ch / gh)
+            ;(fg as any).centerAt((minX + maxX) / 2, (minY + maxY) / 2, 0)
+            ;(fg as any).zoom(ts, 400)
+          }
+        } else {
+          graphRef.current?.zoomToFit(400, 40)
+        }
       }, 250);
     });
     ro.observe(container);
@@ -158,12 +188,19 @@ interface Props { width?: number; height?: number }
   // 布局模式（持久化）
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => loadLS<LayoutMode>(LS_LAYOUT, null))
   const [levelDistance, setLevelDistance] = useState<number>(() => loadLS<number>(LS_LEVEL, 120))
+  const [fitMode, setFitMode] = useState<'contain' | 'cover'>(() => loadLS<'contain' | 'cover'>(LS_FIT_MODE, 'contain'))
+  const fitModeRef = useRef<'contain' | 'cover'>(fitMode)
+  const [physicsOpen, setPhysicsOpen] = useState(false)
+  const physicsRef = useRef<HTMLDivElement>(null)
   // 力导向模式可调参数
   const [chargeStrength, setChargeStrength] = useState(-400)
   const [linkDistance, setLinkDistance]   = useState(120)
   const [collideRadius, setCollideRadius] = useState(45)
   // graphData 改 useState：当 characters/relations 变化时重建，并保留旧节点的 fx/fy
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>(() => ({ nodes: [], links: [] }))
+  // ResizeObserver 早期 useEffect 用 ref 持有最新 graphData，避免 closure 过期
+  const graphDataRef = useRef(graphData)
+  useEffect(() => { graphDataRef.current = graphData }, [graphData])
   useEffect(() => {
     setGraphData(prev => {
       const oldById = new Map(prev.nodes.map(n => [n.id, n]))
@@ -234,6 +271,26 @@ interface Props { width?: number; height?: number }
   useEffect(() => {
     try { localStorage.setItem(LS_LINK_FONT, JSON.stringify(linkFontSize)) } catch {}
   }, [linkFontSize])
+  useEffect(() => {
+    try { localStorage.setItem(LS_FIT_MODE, JSON.stringify(fitMode)) } catch {}
+    fitModeRef.current = fitMode
+  }, [fitMode])
+  // 点击 physicsRef 外部关闭 Popover
+  useEffect(() => {
+    if (!physicsOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (physicsRef.current && !physicsRef.current.contains(e.target as Node)) {
+        setPhysicsOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPhysicsOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [physicsOpen])
   // 每个角色的关系计数
   const relCountMap = useMemo(() => {
     const m = new Map<string, number>()
@@ -289,6 +346,39 @@ interface Props { width?: number; height?: number }
   const handleZoomToFit = useCallback(() => {
     graphRef.current?.zoomToFit(400, 40)
   }, [])
+  // Cover 模式：手算包围盒 + max(scaleX, scaleY)，解决 Portrait 下画布留大块空白的问题 (C 方案)
+  const handleZoomToCover = useCallback(() => {
+    const fg = graphRef.current as unknown as {
+      centerAt: (x?: number, y?: number, ms?: number) => { x: number; y: number } | undefined
+      zoom: (k?: number, ms?: number) => number | undefined
+    } | undefined
+    const container = graphContainerRef.current
+    if (!fg || !container) return
+    const nodes = graphData.nodes as Array<{ x?: number; y?: number }>
+    const positioned = nodes.filter(n => typeof n.x === 'number' && typeof n.y === 'number')
+    if (positioned.length === 0) return
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    for (const n of positioned) {
+      if (n.x! < minX) minX = n.x!
+      if (n.x! > maxX) maxX = n.x!
+      if (n.y! < minY) minY = n.y!
+      if (n.y! > maxY) maxY = n.y!
+    }
+    const pad = 60
+    const gw = Math.max(1, (maxX - minX) + pad * 2)
+    const gh = Math.max(1, (maxY - minY) + pad * 2)
+    const cw = Math.max(1, container.clientWidth)
+    const ch = Math.max(1, container.clientHeight)
+    const targetScale = Math.max(cw / gw, ch / gh)
+    const cx = (minX + maxX) / 2
+    const cy = (minY + maxY) / 2
+    fg.centerAt(cx, cy, 0)
+    fg.zoom(targetScale, 400)
+  }, [graphData])
+  const handleFit = useCallback(() => {
+    if (fitMode === 'cover') handleZoomToCover()
+    else handleZoomToFit()
+  }, [fitMode, handleZoomToCover, handleZoomToFit])
   // 节点与连线字号分别控制（不受 globalScale 影响）
   const drawNode = useCallback((rawNode: unknown, ctx: CanvasRenderingContext2D, _globalScale: number) => {
     const node = rawNode as PositionedNode
@@ -412,7 +502,7 @@ interface Props { width?: number; height?: number }
     }
   }, [linkFontSize])
   return (
-    <div className="rounded-lg overflow-hidden border border-border bg-bg-base relative flex flex-col h-full">
+    <div className="rounded-lg overflow-hidden border border-border bg-bg-base relative flex flex-col flex-1 min-h-0">
       {characters.length === 0 && (
         <div className="absolute inset-0 flex flex-col items-center justify-center text-text-muted z-10 bg-bg-base/80">
           <p className="text-sm">暂无角色数据，请先在「角色」模块添加角色</p>
@@ -455,24 +545,41 @@ interface Props { width?: number; height?: number }
             <span className="text-xs text-text-muted w-8 text-right">{levelDistance}</span>
           </>
         )}
-        {/* 力导向模式：斥力/距离/碰撞 3 个滑杆 */}
+        {/* 力导向模式：3 个滑杆挪到独立 Popover（A2 方案），避免主工具条过长撑爆 Portrait */}
         {layoutMode === null && (
-          <div className="flex items-center gap-2 ml-2 pl-2 border-l border-border">
-            <label className="flex items-center gap-1 text-xs text-text-muted" title="节点间斥力（绝对值越大越分散）">
-              <span>斥</span>
-              <input type="range" min={-1500} max={-50} step={50} value={chargeStrength} onChange={e => setChargeStrength(parseInt(e.target.value))} className="w-16 h-1 accent-accent cursor-pointer" />
-              <span className="w-8 text-right">{chargeStrength}</span>
-            </label>
-            <label className="flex items-center gap-1 text-xs text-text-muted" title="连线目标距离">
-              <span>距</span>
-              <input type="range" min={40} max={300} step={10} value={linkDistance} onChange={e => setLinkDistance(parseInt(e.target.value))} className="w-16 h-1 accent-accent cursor-pointer" />
-              <span className="w-8 text-right">{linkDistance}</span>
-            </label>
-            <label className="flex items-center gap-1 text-xs text-text-muted" title="节点碰撞半径（越大越不重叠）">
-              <span>碰</span>
-              <input type="range" min={20} max={80} step={5} value={collideRadius} onChange={e => setCollideRadius(parseInt(e.target.value))} className="w-16 h-1 accent-accent cursor-pointer" />
-              <span className="w-8 text-right">{collideRadius}</span>
-            </label>
+          <div ref={physicsRef} className="relative ml-1 pl-2 border-l border-border">
+            <button
+              onClick={() => setPhysicsOpen(v => !v)}
+              className={"p-1 rounded transition-colors " + (physicsOpen ? "bg-accent text-white" : "text-text-muted hover:text-text-primary hover:bg-bg-hover")}
+              title="物理参数：斥力 / 距离 / 碰撞"
+              aria-label="物理参数设置"
+            >
+              <Settings className="w-3.5 h-3.5" />
+            </button>
+            {physicsOpen && (
+              <div
+                className="absolute top-full left-1/2 -translate-x-1/2 mt-1 z-30 bg-bg-base/95 border border-border rounded-lg px-3 py-2.5 backdrop-blur shadow-lg flex flex-col gap-2 min-w-[220px]"
+                role="dialog"
+                aria-label="力导向参数"
+              >
+                <div className="text-xs text-text-muted font-medium">物理参数（力导向）</div>
+                <label className="flex items-center gap-2 text-xs text-text-muted" title="节点间斥力（绝对值越大越分散）">
+                  <span className="w-6 shrink-0">斥力</span>
+                  <input type="range" min={-1500} max={-50} step={50} value={chargeStrength} onChange={e => setChargeStrength(parseInt(e.target.value))} className="flex-1 h-1 accent-accent cursor-pointer" />
+                  <span className="w-10 text-right tabular-nums">{chargeStrength}</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-text-muted" title="连线目标距离">
+                  <span className="w-6 shrink-0">距离</span>
+                  <input type="range" min={40} max={300} step={10} value={linkDistance} onChange={e => setLinkDistance(parseInt(e.target.value))} className="flex-1 h-1 accent-accent cursor-pointer" />
+                  <span className="w-10 text-right tabular-nums">{linkDistance}</span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-text-muted" title="节点碰撞半径（越大越不重叠）">
+                  <span className="w-6 shrink-0">碰撞</span>
+                  <input type="range" min={20} max={80} step={5} value={collideRadius} onChange={e => setCollideRadius(parseInt(e.target.value))} className="flex-1 h-1 accent-accent cursor-pointer" />
+                  <span className="w-10 text-right tabular-nums">{collideRadius}</span>
+                </label>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -531,10 +638,15 @@ interface Props { width?: number; height?: number }
             title="缩小"
           >-</button>
           <button
-            onClick={handleZoomToFit}
-            className="w-7 h-7 flex items-center justify-center rounded bg-bg-base/80 border border-border text-text hover:text-text-bright hover:border-accent text-xs backdrop-blur"
-            title="适应窗口"
+            onClick={handleFit}
+            className={"w-7 h-7 flex items-center justify-center rounded border text-xs backdrop-blur " + (fitMode === 'contain' ? "bg-accent text-white border-accent" : "bg-bg-base/80 border-border text-text hover:text-text-bright hover:border-accent")}
+            title={fitMode === 'contain' ? "适应窗口（contain）" : "覆盖窗口（cover）"}
           >FIT</button>
+          <button
+            onClick={() => { setFitMode(m => m === 'cover' ? 'contain' : 'cover'); setTimeout(() => handleFit(), 50) }}
+            className={"w-7 h-7 flex items-center justify-center rounded border text-xs backdrop-blur " + (fitMode === 'cover' ? "bg-accent text-white border-accent" : "bg-bg-base/80 border-border text-text hover:text-text-bright hover:border-accent")}
+            title={fitMode === 'cover' ? "切换为 contain（四周留白）" : "切换为 cover（铺满容器，Portrait 友好）"}
+          ><Maximize2 className="w-3.5 h-3.5" /></button>
         </div>
       </div>
       {/* Graph 撑满 flex-1，min-h-0 让 flex 收缩生效 */}

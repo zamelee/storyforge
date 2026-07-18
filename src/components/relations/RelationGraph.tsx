@@ -183,8 +183,8 @@ interface Props { width?: number; height?: number }
   const { relations } = useCharacterRelationStore()
   const [zoom, setZoom] = useState(1)
   const [measureRef, bounds] = useMeasure()
-  const [nodeFontSize, setNodeFontSize] = useState<number>(() => loadLS<number>(LS_NODE_FONT, 12))
-  const [linkFontSize, setLinkFontSize] = useState<number>(() => loadLS<number>(LS_LINK_FONT, 10))
+  const [nodeFontSize, setNodeFontSize] = useState<number>(() => loadLS<number>(LS_NODE_FONT, 9))
+  const [linkFontSize, setLinkFontSize] = useState<number>(() => loadLS<number>(LS_LINK_FONT, 9))
   // 布局模式（持久化）
   const [layoutMode, setLayoutMode] = useState<LayoutMode>(() => loadLS<LayoutMode>(LS_LAYOUT, null))
   const [levelDistance, setLevelDistance] = useState<number>(() => loadLS<number>(LS_LEVEL, 120))
@@ -193,8 +193,8 @@ interface Props { width?: number; height?: number }
   const [physicsOpen, setPhysicsOpen] = useState(false)
   const physicsRef = useRef<HTMLDivElement>(null)
   // 力导向模式可调参数
-  const [chargeStrength, setChargeStrength] = useState(-400)
-  const [linkDistance, setLinkDistance]   = useState(120)
+  const [chargeStrength, setChargeStrength] = useState(-900)
+  const [linkDistance, setLinkDistance]   = useState(150)
   const [collideRadius, setCollideRadius] = useState(45)
   // graphData 改 useState：当 characters/relations 变化时重建，并保留旧节点的 fx/fy
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>(() => ({ nodes: [], links: [] }))

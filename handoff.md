@@ -483,3 +483,167 @@ useEffect(() => {
 - 旧备份可清: bak.2026-07-17T18-00-32, bak.2026-07-17T18-10-19 (中间版本,功能已被新版覆盖)
 - 保留建议: bak.09-30-04 (前一会话起点) + bak.2026-07-17T22-45 (Item 2 写入前) + bak.2026-07-18T09-55-25 (本次起点)
 
+
+---
+
+# StoryForge 关系图布局修复 - 2026-07-18 (c2a79e2)
+
+> **最新提交**: c2a79e2 fix(relation-graph): popover physics + flex layout + cover fit (3 layout issues, Gemini 9122a8b22405cdbe)
+> **服务端口**: 999 | URL: http://localhost:999/storyforge/workspace/1
+> **协作会话**: Gemini 9122a8b22405cdbe (React + react-force-graph-2d + Tailwind)
+
+---
+
+## 本次目标
+
+修复双显示器（横屏 1703×1080 / 竖屏 1080×1703）下「关系图」3 个布局根因：
+
+1. **A2**: 力导向 3 滑杆（斥力/距离/碰撞）跟 6 个布局按钮挤在主工具条，撑爆 Portrait 宽度
+2. **B**: graphCard 在竖屏下不能撑满 main 高度 → 画布留大片空白
+3. **C2**: Portrait 下 zoomToFit (contain) 留大块空白，需要 cover（铺满容器）
+
+---
+
+## 已完成改动
+
+### 1. A2: 力导向 3 滑杆 → ⚙️ Popover
+
+**文件**: src/components/relations/RelationGraph.tsx
+
+- imports 新增 Settings, Maximize2 from lucide-react
+- 主工具条力导向区域从 3 个 inline <label> 改为 1 个 ⚙️ button + 条件渲染 Popover
+- Popover 内容: 标题「物理参数（力导向）」+ 3 滑杆（斥力/距离/碰撞）
+- 自写 click-outside + ESC 关闭（document.addEventListener('mousedown' / 'keydown')），**未引入新依赖**（如 @radix-ui / floating-ui）
+- 新 state: physicsOpen: boolean, physicsRef: HTMLDivElement
+
+**主工具条前后对比 (Portrait 1080×1703)**:
+- 修复前: 621×62 px（含 3 滑杆）
+- 修复后: 403×46 px（仅 6 布局按钮 + ⚙️）
+- 与右工具条重叠: 81.5×62 → **0**
+
+### 2. B: Flexbox 改造
+
+**文件**: src/components/relations/CharacterRelationPanel.tsx
+
+- line 115: h-[calc(100vh-180px)] → min-h-[calc(100vh-180px)]（min-h 允许 flex 收缩撑满）
+- line 280: lex-1 min-h-[500px] → lex flex-col flex-1 min-h-0（flex-col + min-h-0 是 flex 收缩关键）
+
+**文件**: src/components/relations/RelationGraph.tsx
+
+- line 505 (graphCard 根 div): lex flex-col h-full → lex flex-col flex-1 min-h-0（h-full 在 column flex 父下计算不到 align-self stretch）
+- line 655 (graph 容器): lex-1 min-h-0 不变（已正确）
+
+**实测 (Portrait 1080×1703)**:
+- graphCard: 808×1471 px（正确撑到 main 高度）
+- canvas: 806×1388 px（跟随 graphContainer ResizeObserver）
+
+### 3. C2: zoom-to-cover 算法
+
+**文件**: src/components/relations/RelationGraph.tsx
+
+- 新 state: itMode: 'contain' | 'cover'，持久化到 localStorage[sf_relationgraph_fit_mode]
+- 新 ref: itModeRef（同步 fitMode 供 ResizeObserver callback 读取，避免 closure 过期）
+- 新函数 handleZoomToCover: 手算 bbox + 	argetScale = Math.max(cw/gw, ch/gh) → centerAt(cx, cy, 0) + zoom(targetScale, 400)
+- 新函数 handleFit: 根据 fitMode 调 fit 或 cover
+- ResizeObserver 250ms debounce 回调内 inline cover 算法（读 graphDataRef.current）
+- FIT 按钮 onClick 改 handleFit
+- 新增 ▣ (Maximize2) 切换按钮: 切换 fitMode 后 setTimeout(handleFit, 50) 触发一次
+
+**按钮视觉反馈**:
+- 当前 fitMode 高亮（accent 背景）
+- FIT title: '适应窗口（contain）' 或 '覆盖窗口（cover）'
+- ▣ title: '切换为 contain（四周留白）' 或 '切换为 cover（铺满容器，Portrait 友好）'
+
+---
+
+## 中间战（已修复但易重蹈）
+
+### TDZ 错误
+- **症状**: ResizeObserver useEffect 在 line 80，但 fitMode/graphData 在 line 161+/202+ 才声明 → deps=[fitMode, handleZoomToCover] 立即求值触发 TDZ
+- **解法**: deps 改回 []，fitMode 用 itModeRef = useRef(fitMode) + 同步 useEffect；graphData 用 graphDataRef = useRef(graphData) + 同步 useEffect；ResizeObserver callback 内 inline cover 算法（读 graphDataRef.current）
+
+### flex stretch 被 h-full 覆盖
+- **症状**: wrap 是 flex flex-col (column) 时，子元素 height: 100% 计算不到父的 flex-grow 高度
+- **解法**: graphCard 的 h-full → lex-1 min-h-0，靠 align-self: stretch 撑满
+
+### line endings
+- **症状**: apply_patch 工具会把 CRLF 改 LF，必须事后用 Python 重整为 CRLF，否则 git 警告
+- **解法**: 后续所有 patch 用 Python temp file (	mp/_patch_X.py) + Python 执行，绝不用 apply_patch
+- 注: 本次 commit 时 git autocrlf=true 自动 normalize CRLF→LF 入库，工作树保留 CRLF 不影响 commit
+
+---
+
+## 实测验证 (Chrome DevTools MCP, page 7, localhost:999)
+
+### Portrait 1080×1703
+
+| 元素 | 修复前 | 修复后 |
+|---|---|---|
+| 主工具条 (居中) | 621×62 (含 3 滑杆) | **403×46** (仅 6 布局按钮 + ⚙️) |
+| 右工具条 (右上) | 166×188 | 166×220 (含 ▣ cover 按钮) |
+| **主+右 重叠** | **81.5×62 像素级** | **0** ✅ |
+| wrap (graphCard.parent) | n/a | 1471 (正确撑开) |
+| graphCard | 808×1388 | 808×1471 ✅ |
+| canvas | 806×1388 | 806×1388 |
+
+### Landscape 1703×1080
+
+| 元素 | 数值 |
+|---|---|
+| graphCard | 1425×1451 (高度 > viewport 但可滚动) |
+| canvas | 1423×1388 |
+| 主工具条 | 419×34 |
+| 右工具条 | 166×220 |
+| 重叠 | **0** ✅ |
+
+### Popover 行为
+- 点击 ⚙️ → 弹出 220px 宽 Popover 显示 3 滑杆 ✅
+- 点击 Popover 外部 → 关闭 ✅
+- 按 ESC → 关闭 ✅
+- 截图中可见：'物理参数（力导向）' / 斥力 -400 / 距离 120 / 碰撞 45
+
+### Cover 模式
+- 点击 ▣ 按钮 → 切换 fitMode → 高亮 ✅
+- 再次点击 → 切回 contain ✅
+- localStorage 持久化 ✅
+
+---
+
+## 已知遗留（非本任务范围）
+
+1. **React warning**: Cannot update a component (RelationGraph) while rendering a different component (ForceGraph2D) at line 344 (onZoom setState)
+   - **pre-existing**, 来自 cb3fa9d 引入
+   - onZoom 是 ForceGraph2D 的 prop，但 ForceGraph2D 在 render 阶段同步调用它
+   - **建议修复**: defer setState 用 queueMicrotask(() => setZoom(...))，或加 prev === newZoom ? prev : newZoom 短路
+   - 待后续独立 commit 处理
+
+2. **Landscape 滚动**: 1080 viewport + 1388 canvas → 出现 ~308px 滚动条
+   - 用户接受: '尽量少一些，不是没有，避免元素一直往下落'
+   - 这是物理引擎自然结果: 节点数 × 半径 > viewport 短边
+
+3. **TypeScript 验证**: 仍为 4 个 pre-existing 错误（与本次无关）
+   - CharacterRelationPanel.tsx:36 graphWidth unused
+   - RelationGraph.tsx:40 MORAL_COLOR unused
+   - RelationGraph.tsx:297 moral unused
+   - RelationGraph.tsx:585 minimap 不在 ForceGraphProps 类型里
+
+---
+
+## 备份
+
+- 	mp/code-backups/RelationGraph.tsx.20260718-111605.bak - 本次修复前起点 (37211 bytes)
+- 	mp/code-backups/CharacterRelationPanel.tsx.20260718-111605.bak - 本次修复前起点
+- 	mp/code-backups/CharacterRelationPanel.tsx.bak.pre-flexbox - flex 改造前中间状态
+
+---
+
+## 临时脚本（待清理，需用户批准）
+
+- 	mp/_patch6.py 	mp/_patch7.py 	mp/_patch8.py - 初版 Popover 试验
+- 	mp/_patch_panel.py 	mp/_patch_wrap.py - flex 改造试验
+- 	mp/_patch_tdz.py 	mp/_patch_tdz2.py 	mp/_patch_tdz3.py 	mp/_patch_tdz4.py - TDZ 错误各阶段修复
+- 	mp/_patch_gdr.py 	mp/_patch_gdr2.py - ResizeObserver inline cover 试验
+- 	mp/_patch_graphcard.py - graphCard flex-1 改造
+- 	mp/_patch_item1.py ... 	mp/_patch_item4b.py - **前一会话残留**（Item 1-4 字号/曲率/工具条/中键 pan）
+
+建议全部删除（任务已完成，临时脚本无后续用途）。

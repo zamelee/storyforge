@@ -647,3 +647,61 @@ useEffect(() => {
 - 	mp/_patch_item1.py ... 	mp/_patch_item4b.py - **前一会话残留**（Item 1-4 字号/曲率/工具条/中键 pan）
 
 建议全部删除（任务已完成，临时脚本无后续用途）。
+
+
+---
+
+## 2026-07-18 会话记录 · 关系图 5 项 UX 改进 (A-E)
+
+**commit**: `96d9ccd feat(relation-panel): 5 项 UX 改进 (A-E)`
+
+### 5 项改进（用户确认 OK）
+
+| # | 项 | 实现 |
+|---|---|---|
+| A | 默认值 | 节点/连线 9px, 斥力 -900, 距离 150, 碰撞 45 |
+| B | 同显 + 拖动分屏 + 持久化 | `sf_relationgraph_split` [0.25, 0.85] |
+| C | 三按钮视图切换 | 同显 (默认) / 仅图 / 仅表 |
+| D | 列表自适应 | `flex-1 min-h-0 min-w-0 overflow-y-auto` |
+| E | < 700px 抽屉降级 | FAB (Eye 图标) + Drawer (右侧滑入 w-96) |
+
+### 实测证据 (Chrome DevTools MCP, page 7, localhost:999)
+
+**Landscape 1703×1080 (同显模式)**:
+- 同显按钮高亮 (view='both')
+- graph 容器 1425×663 (split 0.25, height: 25%)
+- list 容器 1425×3207
+- localStorage.persist: `sf_relationgraph_split = "0.25"` ✓ (拖动持久化生效)
+- dragEnd clamp 到下限 [0.25, 0.85] 生效
+
+**Portrait 600×800 (抽屉降级)**:
+- 浮动按钮 "列表 (29)" 右下角 fixed ✓ (degraded = true)
+- divider 不渲染 ✓
+- 内联 list 不渲染 ✓
+- graph 占满全宽 ✓
+- Drawer 点击 FAB 打开: 右侧滑入, 含完整 29 条关系 + 关闭按钮
+- Drawer 点击 X 关闭: 回到关系图视图 ✓
+
+### TSC 验证
+
+- `CharacterRelationPanel.tsx`: **0 错误**
+- `RelationGraph.tsx`: 3 pre-existing 错误 (MORAL_COLOR / moral / minimap) — 不在本任务范围
+
+### 新增临时文件
+
+- `tmp/code-backups/CharacterRelationPanel.tsx.<timestamp>.pre-drawer` — 实施 E 前备份
+
+### 待跟进 (issue/讨论)
+
+1. **panel orient 误判**: 当 panel 内容撑高 (e.g. 29 条关系 → 3207px) 时, ResizeObserver 触发 setOrientation='portrait', 但 viewport 实际是 landscape 1703×1080。结果：landscape 模式下走了 flex-col 上下布局而非 flex-row 左右布局。
+   - 设计原意: container-based orientation 避免 matchMedia sidebar pitfall
+   - 副作用: 内容一多就触发误判
+   - 建议方案: 改用 viewport orientation (matchMedia innerWidth/innerHeight), 但需讨论是否保留 container-based 设计意图
+
+2. **3 个 RelationGraph.tsx pre-existing 错误** (handoff §已知遗留):
+   - MORAL_COLOR unused (line 42)
+   - moral unused (line 387)
+   - minimap 不在 ForceGraphProps 类型 (line 693)
+   - 建议后续独立 commit 处理
+
+3. **临时脚本清理**: 上次会话遗留 `tmp/_patch_*.py` × 15+ 文件, 本会话未新增, 等用户批准后批量删除

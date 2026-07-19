@@ -818,3 +818,68 @@ a different component (ForceGraph2D)`。
 ### 备份
 - tmp/code-backups/CharacterRelationPanel.tsx.pre-fix-flex-bug
 - tmp/code-backups/RelationGraph.tsx.pre-fix-flex-bug
+
+---
+
+# StoryForge 关系图 contain 模式 fit 算法修复 - 2026-07-19
+
+**项目**: D:/Documents/VibeCoding/storyforge | 分支: main
+**服务端口**: 999 (用户明令禁止重启) | URL: http://localhost:999/storyforge/workspace/1
+
+## 目标
+contain 模式点击 FIT 后:
+1. 节点视觉边界完整在 canvas 内
+2. **不被顶部布局工具条 / 右侧控制区压住**
+
+## 关键技术发现
+react-force-graph 的 centerAt(P) 实现 (force-graph.mjs:1218, setCenter):
+`js
+state.zoom.translateTo(state.zoom.__baseElem, x, y, ...)
+`
+内部 d3-zoom 	ranslateTo 用当前 k 计算 	x = p0x - P*k_current。
+图点 Q 屏幕位置 = Q*k + tx = Q*k + p0x - P*k_current。
+
+如果 Q = P 且 k_current = fit 后的 zoomK, 那么 Q*k + p0x - Q*k = p0x = canvas 中心。
+但 Gemini 给的公式 centerAt(cx_g + (l-r)/(2k)) 让 centerAt 接受 P > cx_g 的点,
+导致图心被推到反方向（向右偏 instead of 左），**符号反了**。
+
+## 正确公式推导
+- 图心 cx_g 屏幕 = cx_g*k + tx = cx_g*k + p0x - P*k_current
+- 目标 = safe_cx = p0x + (l-r)/2
+- 解出 P (centerAt 输入): P = cx_g + (p0x - safe_cx)/k = cx_g - (l-r)/(2k)
+- **所以 offsetX = cx_g - (ins.left - ins.right) / (2 * k)** (用减号, 不是加号)
+
+## 修复
+文件: src/components/relations/RelationGraph.tsx
+
+1. handleZoomToFit 内符号反转
+   offsetX = cx - (ins.left - ins.right) / (2 * k)
+   offsetY = cy - (ins.top - ins.bottom) / (2 * k)
+
+2. ResizeObserver 内 contain 路径 (line 161-162) 同步修正
+   ox = cx - (ins.left - ins.right) / (2 * k)
+   oy = cy - (ins.top - ins.bottom) / (2 * k)
+
+3. handleZoomToFit 头部加同步 fallback, 避免 mount 时 ResizeObserver 没跑导致 safeInsetRef 是初始 0
+   - 用 graphContainerRef/layoutBarRef/controlsRef 实时 getBoundingClientRect 同步算一次
+
+## 验证 (Chrome DevTools MCP 实测)
+实测 fit 后:
+- canvas 804×883, layoutBar bottom=54, controlsLeft=174
+- inset: top=66, right=186
+- safe 区: top≥66, right≤618
+- **亮像素 bbox cx=308.5 (safe_cx=309) ✅ cy=474.5 (safe_cy=474.5) ✅**
+- **亮像素 bbox minX=25, maxX=592 (右控制区左沿=804-174=630, maxX<safe right 618) ✅**
+- **亮像素 bbox minY=110 (>top inset 66) ✅**
+
+视觉验证: 节点视觉边界完全在工具条下、控制区左边，不再被压。
+
+## 浏览器实测工具
+- service_devtools_mcp: page 8 = http://localhost:999/storyforge/workspace/1
+- evaluate_script 读 canvas getImageData + DOM 测量工具条位置
+
+## 备份
+- tmp/code-backups/RelationGraph.tsx.pre-contain-safe-inset
+
+## 后续
+- cover 模式不动（用户最新指示）

@@ -129,7 +129,41 @@ interface Props { width?: number; height?: number }
             ;(fg as any).zoom(ts, 400)
           }
         } else {
-          graphRef.current?.zoomToFit(400, 40)
+          // inline contain: 安全区 + 节点视觉半径 + safe 区中心
+          const fg = graphRef.current as unknown as {
+            centerAt: (x?: number, y?: number, ms?: number) => unknown
+            zoom: (k?: number, ms?: number) => unknown
+          } | undefined
+          const c = graphContainerRef.current
+          const ns = (graphDataRef.current?.nodes ?? []) as unknown as Array<{ x?: number; y: number }>
+          const ps = ns.filter(n => typeof n.x === 'number' && typeof n.y === 'number')
+          if (fg && c && ps.length > 0) {
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+            for (const n of ps) {
+              if (n.x! < minX) minX = n.x!
+              if (n.x! > maxX) maxX = n.x!
+              if (n.y! < minY) minY = n.y!
+              if (n.y! > maxY) maxY = n.y!
+            }
+            const gw = Math.max(1, maxX - minX)
+            const gh = Math.max(1, maxY - minY)
+            const cw = Math.max(1, c.clientWidth)
+            const ch = Math.max(1, c.clientHeight)
+            const ins = safeInsetRef.current
+            const nodeR = nodeVisualR
+            const effGw = gw + nodeR * 2
+            const effGh = gh + nodeR * 2
+            const safeW = Math.max(1, cw - ins.left - ins.right)
+            const safeH = Math.max(1, ch - ins.top - ins.bottom)
+            const k = Math.min(safeW / effGw, safeH / effGh)
+            const cx = (minX + maxX) / 2
+            const cy = (minY + maxY) / 2
+            const ox = cx - (ins.left - ins.right) / (2 * k)
+            const oy = cy - (ins.top - ins.bottom) / (2 * k)
+
+            ;(fg as any).centerAt(ox, oy, 0)
+            ;(fg as any).zoom(k, 400)
+          }
         }
       }, 250);
     });
@@ -139,6 +173,41 @@ interface Props { width?: number; height?: number }
       ro.disconnect();
     };
   }, [])
+  // 实时量 safe inset: 顶部布局工具条 + 右侧控制区占据的矩形
+  // contain 模式 fit 时用这些 inset 算出安全可视区，节点视觉边界不压工具条
+  useEffect(() => {
+    const compute = () => {
+      const c = graphContainerRef.current
+      if (!c) return
+      const cRect = c.getBoundingClientRect()
+      const margin = 12 // 工具条和节点的间距
+      let top = 0
+      let right = 0
+      const lb = layoutBarRef.current
+      if (lb) {
+        const r = lb.getBoundingClientRect()
+        // absolute top-2 (8px) + bottom = 工具条下沿到容器上沿的距离
+        top = Math.max(0, r.bottom - cRect.top + margin)
+      }
+      const ctrl = controlsRef.current
+      if (ctrl) {
+        const r = ctrl.getBoundingClientRect()
+        right = Math.max(0, cRect.right - r.left + margin)
+      }
+      safeInsetRef.current = { top, right, bottom: 0, left: 0 }
+    }
+    compute()
+    const ro = new ResizeObserver(compute)
+    ro.observe(graphContainerRef.current!)
+    if (layoutBarRef.current) ro.observe(layoutBarRef.current)
+    if (controlsRef.current) ro.observe(controlsRef.current)
+    window.addEventListener('resize', compute)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', compute)
+    }
+  }, [])
+
   // 中键 pan：react-force-graph 内部 d3-zoom filter 强制 !ev.button（非左键一律拒绝），
   // 这里自接管 middle button，调 centerAt 偏移图心。
   // centerAt() 无参为 getter 返回 {x, y} 当前位置；centerAt(x, y) 直接 set，无 transitionMs。
@@ -179,6 +248,16 @@ interface Props { width?: number; height?: number }
   // 中键 pan 状态（不引发重渲染）
   const isPanning = useRef(false)
   const lastPanPoint = useRef<{ x: number; y: number }>({ x: 0, y: 0 })
+  // 顶部布局工具条 + 右侧控制区 ref（contain 模式 safe inset 实时量）
+  const layoutBarRef = useRef<HTMLDivElement>(null)
+  const controlsRef = useRef<HTMLDivElement>(null)
+  // safe inset: 节点视觉边界要避开这些区域，单位 px
+  const safeInsetRef = useRef<{ top: number; right: number; bottom: number; left: number }>({
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+  })
   const { characters } = useCharacterStore()
   const { relations } = useCharacterRelationStore()
   const [zoom, setZoom] = useState(1)
@@ -196,6 +275,41 @@ interface Props { width?: number; height?: number }
   const [chargeStrength, setChargeStrength] = useState(-900)
   const [linkDistance, setLinkDistance]   = useState(150)
   const [collideRadius, setCollideRadius] = useState(45)
+  // 节点视觉半径：基于实际字符名 measureText 估算 cardW/2 + cardH/2 较大值
+  // fit 算法需要这个值算 safe 区的实际可用宽高
+  const nodeVisualR = useMemo(() => {
+    if (typeof document === 'undefined') return 40
+    const cv = document.createElement('canvas')
+    const ctx = cv.getContext('2d')!
+    const fs = Math.max(6, nodeFontSize)
+    const sfs = Math.max(5, nodeFontSize * 0.78)
+    // 名字最大宽度
+    ctx.font = `${fs}px PingFang SC, Microsoft YaHei, sans-serif`
+    let maxNameW = 0
+    for (const c of characters) {
+      const w = ctx.measureText(c.name).width
+      if (w > maxNameW) maxNameW = w
+    }
+    // 戏份标签最大宽度
+    ctx.font = `${sfs}px PingFang SC, sans-serif`
+    let maxTagW = 0
+    const tagTexts = new Set<string>()
+    for (const c of characters) tagTexts.add(ROLE_WEIGHT_LABEL[c.roleWeight as keyof typeof ROLE_WEIGHT_LABEL] ?? c.roleWeight)
+    for (const t of tagTexts) {
+      const w = ctx.measureText(t).width
+      if (w > maxTagW) maxTagW = w
+    }
+    // 关系计数 "X条关系"
+    let maxCntW = 0
+    for (let i = 1; i <= 20; i++) {
+      const w = ctx.measureText(`${i}条关系`).width
+      if (w > maxCntW) maxCntW = w
+    }
+    const cardW = Math.max(maxNameW, maxTagW, maxCntW) + 8 // +8 = padX*2
+    const avatarR = Math.max(6, nodeFontSize * 1.4)
+    const cardH = avatarR * 2 + 4 + fs + sfs * 1.5 + 8
+    return Math.ceil(Math.max(cardW, cardH) / 2) + 4 // +4 breathing
+  }, [characters, nodeFontSize])
   // graphData 改 useState：当 characters/relations 变化时重建，并保留旧节点的 fx/fy
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>(() => ({ nodes: [], links: [] }))
   // ResizeObserver 早期 useEffect 用 ref 持有最新 graphData，避免 closure 过期
@@ -349,8 +463,67 @@ interface Props { width?: number; height?: number }
     queueMicrotask(() => setZoom(fg.zoom() ?? 1))
   }, [])
   const handleZoomToFit = useCallback(() => {
-    graphRef.current?.zoomToFit(400, 40)
-  }, [])
+    // 容错：safeInsetRef 在 mount 后第一次 fit 时可能未初始化（layoutBarRef 等还没 ref 上）
+    // 同步算一次，避开闭包问题
+    const cEl = graphContainerRef.current
+    if (cEl) {
+      const cRect = cEl.getBoundingClientRect()
+      const margin2 = 12
+      let _top = 0
+      let _right = 0
+      const lb = layoutBarRef.current
+      if (lb) {
+        const r = lb.getBoundingClientRect()
+        _top = Math.max(0, r.bottom - cRect.top + margin2)
+      }
+      const ctrl = controlsRef.current
+      if (ctrl) {
+        const r = ctrl.getBoundingClientRect()
+        _right = Math.max(0, cRect.right - r.left + margin2)
+      }
+      safeInsetRef.current = { top: _top, right: _right, bottom: 0, left: 0 }
+    }
+    const fg = graphRef.current as unknown as {
+      centerAt: (x?: number, y?: number, ms?: number) => { x: number; y: number } | undefined
+      zoom: (k?: number, ms?: number) => number | undefined
+    } | undefined
+    const container = cEl
+    if (!fg || !container) return
+    const nodes = graphData.nodes as unknown as Array<{ x?: number; y: number }>
+    const positioned = nodes.filter(n => typeof n.x === 'number' && typeof n.y === 'number')
+    if (positioned.length === 0) return
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    for (const n of positioned) {
+      if (n.x! < minX) minX = n.x!
+      if (n.x! > maxX) maxX = n.x!
+      if (n.y! < minY) minY = n.y!
+      if (n.y! > maxY) maxY = n.y!
+    }
+    const gw = Math.max(1, maxX - minX)
+    const gh = Math.max(1, maxY - minY)
+    const cw = Math.max(1, container.clientWidth)
+    const ch = Math.max(1, container.clientHeight)
+    const ins = safeInsetRef.current
+    // 节点视觉半径：与 nodePointerAreaPaint 公式对齐，随字号放大
+    const nodeR = nodeVisualR
+    // 把节点视觉边界也算进图包围盒：effectiveGW = (maxX-minX) + 2*nodeR
+    // 这样 k 算出来让节点视觉边界正好填满 safe 区
+    const effGw = gw + nodeR * 2
+    const effGh = gh + nodeR * 2
+    // 有效可视区 = canvas - safe inset（不再减 nodeR，因为已经加到 effG）
+    const safeW = Math.max(1, cw - ins.left - ins.right)
+    const safeH = Math.max(1, ch - ins.top - ins.bottom)
+    // contain: 取最小比例，保证节点视觉边界完整在 safe 区内
+    const k = Math.min(safeW / effGw, safeH / effGh)
+    const cx = (minX + maxX) / 2
+    const cy = (minY + maxY) / 2
+    // 中心点偏移：把图心放到 safe 区中心（不是 canvas 中心）
+    // safe 区中心相对 canvas 中心的偏移 = (left - right) / 2 水平, (top - bottom) / 2 垂直
+    const offsetX = cx - (ins.left - ins.right) / (2 * k)
+    const offsetY = cy - (ins.top - ins.bottom) / (2 * k)
+    fg.centerAt(offsetX, offsetY, 0)
+    fg.zoom(k, 400)
+  }, [graphData, nodeFontSize])
   // Cover 模式：手算包围盒 + max(scaleX, scaleY)，解决 Portrait 下画布留大块空白的问题 (C 方案)
   const handleZoomToCover = useCallback(() => {
     const fg = graphRef.current as unknown as {
@@ -519,7 +692,7 @@ interface Props { width?: number; height?: number }
         </div>
       )}
       {/* 顶部居中：布局切换 + 层级距离滑杆（仅非力导向布局显示） */}
-      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-bg-base/80 border border-border rounded-lg px-2 py-1 backdrop-blur">
+      <div ref={layoutBarRef} className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 bg-bg-base/80 border border-border rounded-lg px-2 py-1 backdrop-blur">
         <span className="text-xs text-text-muted">布局</span>
         {LAYOUT_OPTIONS.map(opt => (
           <button
@@ -591,7 +764,7 @@ interface Props { width?: number; height?: number }
       {/* 右上角：浮动垂直控制台 (Floating Action Column)
           - Gemini 推荐 pattern：flex-col 垂直堆叠，避免与中部布局栏横向冲突
           - 字号卡（节点 + 连线 2 滑杆）/ 重置按钮 / 缩放按钮组 各占一行 */}
-      <div className="absolute top-2 right-2 flex flex-col items-end gap-2 z-20">
+      <div ref={controlsRef} className="absolute top-2 right-2 flex flex-col items-end gap-2 z-20">
         {/* 字号卡：节点 + 连线 2 条滑杆垂直排列，独立可调 */}
         <div className="flex flex-col gap-1.5 bg-bg-base/80 border border-border rounded px-2 py-1.5 backdrop-blur">
           <div className="flex items-center gap-1.5">
@@ -756,4 +929,3 @@ function processLinks(links: GraphLink[]): GraphLink[] {
   }
   return links
 }
-

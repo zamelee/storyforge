@@ -7,13 +7,9 @@ import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildRelationExtractPrompt, parseRelationOutput, matchRelations, type MatchedRelation } from '../../lib/ai/relation-extractor'
 import type { Project, RelationType } from '../../lib/types'
 import RelationGraph from './RelationGraph'
+import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
 
 
-function loadLS<T>(key: string, fallback: T): T {
-  try { const v = localStorage.getItem(key); return v == null ? fallback : (JSON.parse(v) as T) }
-  catch { return fallback }
-}
-const LS_SPLIT = 'sf_relationgraph_split'
 
 const RELATION_TYPES: { value: RelationType; label: string }[] = [
   { value: 'family', label: '👨‍👩‍👧 亲属' },
@@ -44,10 +40,10 @@ export default function CharacterRelationPanel({ project }: Props) {
   const [graphWidth, setGraphWidth] = useState(700)
   // Container-based orientation (not viewport), avoids matchMedia sidebar pitfall
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('landscape')
-  // Draggable split ratio [0.25, 0.85], persisted to localStorage
-  const [split, setSplit] = useState<number>(() => loadLS<number>(LS_SPLIT, 0.6))
-  const splitRef = useRef(split)
-  const draggingRef = useRef(false)
+
+  // react-resizable-panels v4 用 useDefaultLayout + onLayoutChanged 持久化分屏比例
+  // id 唯一标识此 group/layout, 自动写入 localStorage
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({ id: 'storyforge-graph' })
 
   // 抽屉降级: < 700px 时把列表收起到浮动 Drawer
   const [showListDrawer, setShowListDrawer] = useState(false)
@@ -117,30 +113,6 @@ export default function CharacterRelationPanel({ project }: Props) {
     ai.reset()
   }
 
-  // Drag divider: compute ratio from clientX/Y - rect.left/top, persist on onUp
-  const onDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    draggingRef.current = true
-    const onMove = (ev: MouseEvent) => {
-      if (!draggingRef.current || !containerRef.current) return
-      const rect = containerRef.current.getBoundingClientRect()
-      const raw = orientation === 'landscape'
-        ? (ev.clientX - rect.left) / rect.width
-        : (ev.clientY - rect.top) / rect.height
-      // Clamp to [0.25, 0.85] for minimum visibility on both sides
-      const next = Math.max(0.25, Math.min(0.85, raw))
-      splitRef.current = next
-      setSplit(next)
-    }
-    const onUp = () => {
-      draggingRef.current = false
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-      try { localStorage.setItem(LS_SPLIT, JSON.stringify(splitRef.current)) } catch {}
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }, [orientation])
 
   // 新建关系
   const handleAdd = async () => {
@@ -162,17 +134,126 @@ export default function CharacterRelationPanel({ project }: Props) {
 
   const projectRelations = relations.filter((r) => r.projectId === projectId)
 
+  // 关系列表内容 (主体 + Drawer 共用)
+  const listContent = (
+    <>
+      {projectRelations.length === 0 && characters.length >= 2 && (
+        <div className="text-center py-16 text-text-muted">
+          <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
+          <p>还没有角色关系</p>
+          <p className="text-sm mt-1">点击「添加关系」开始定义角色间的关系</p>
+        </div>
+      )}
+      {projectRelations.length > 0 && (
+        <div className="space-y-3">
+          {projectRelations.map((rel) => {
+            const isEditing = editingId === rel.id
+            return (
+              <div
+                key={rel.id}
+                className="bg-bg-surface border border-border rounded-lg p-4 hover:border-accent/30 transition-colors"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <select
+                    value={rel.fromCharacterId}
+                    onChange={(e) =>
+                      updateRelation(rel.id!, { fromCharacterId: Number(e.target.value) })
+                    }
+                    className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary flex-1 max-w-[180px]"
+                  >
+                    {characters.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() =>
+                      updateRelation(rel.id!, { isBidirectional: !rel.isBidirectional })
+                    }
+                    className="text-accent hover:text-accent/80 transition-colors"
+                    title={rel.isBidirectional ? '双向关系（点击改为单向）' : '单向关系（点击改为双向）'}
+                  >
+                    {rel.isBidirectional ? (
+                      <ArrowRightLeft className="w-5 h-5" />
+                    ) : (
+                      <ArrowRight className="w-5 h-5" />
+                    )}
+                  </button>
+                  <select
+                    value={rel.toCharacterId}
+                    onChange={(e) =>
+                      updateRelation(rel.id!, { toCharacterId: Number(e.target.value) })
+                    }
+                    className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary flex-1 max-w-[180px]"
+                  >
+                    {characters.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={rel.relationType}
+                    onChange={(e) =>
+                      updateRelation(rel.id!, { relationType: e.target.value as RelationType })
+                    }
+                    className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary"
+                  >
+                    {RELATION_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setEditingId(isEditing ? null : rel.id!)}
+                    className="text-xs text-text-muted hover:text-text-primary transition-colors"
+                  >
+                    {isEditing ? '收起' : '编辑'}
+                  </button>
+                  <button
+                    onClick={() => deleteRelation(rel.id!)}
+                    className="text-text-muted hover:text-red-400 transition-colors"
+                    title="删除关系"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <span className="font-medium text-text-primary">{getCharacterName(rel.fromCharacterId)}</span>
+                  <span className="text-accent">{rel.isBidirectional ? '⇄' : '→'}</span>
+                  <span className="font-medium text-text-primary">{getCharacterName(rel.toCharacterId)}</span>
+                  <span className="text-text-muted">：</span>
+                  {isEditing ? (
+                    <input
+                      value={rel.label}
+                      onChange={(e) => updateRelation(rel.id!, { label: e.target.value })}
+                      className="bg-bg-base border border-border rounded px-2 py-1 text-sm text-text-primary flex-1"
+                      placeholder="关系标签，如：父子、宿敌、暗恋对象"
+                    />
+                  ) : (
+                    <span className="text-accent font-medium">{rel.label || '未命名关系'}</span>
+                  )}
+                </div>
+                {isEditing && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <label className="block text-xs text-text-muted mb-1">关系描述</label>
+                    <textarea
+                      value={rel.description}
+                      onChange={(e) => updateRelation(rel.id!, { description: e.target.value })}
+                      rows={3}
+                      className="w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted resize-none focus:outline-none focus:border-accent"
+                      placeholder="描述这段关系的背景、变化、冲突等..."
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </>
+  )
+
   return (
     <div
       ref={containerRef}
-      className={
-        view === 'list'
-          ? 'max-w-4xl mx-auto w-full space-y-6'
-          : view === 'graph'
-            ? 'w-full space-y-4 flex flex-col min-h-[calc(100vh-180px)]'
-            // both: adaptive row/col based on container orientation
-            : `w-full flex ${orientation === 'portrait' ? 'flex-col' : 'flex-row'} gap-0 min-h-[calc(100vh-180px)]`
-      }
+      className="absolute inset-6 flex flex-col overflow-hidden bg-bg-base border border-border rounded-lg shadow-sm"
     >
       {/* 标题 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -354,182 +435,49 @@ export default function CharacterRelationPanel({ project }: Props) {
         </div>
       )}
 
-      {/* 关系图视图: 单图模式 OR 同显模式 (含极值兜底) */}
-      {(view === 'graph' || view === 'both') && (
-        <div
-          className={
-            view === 'both' && !degraded
-              ? 'flex-shrink-0 min-h-0 min-w-0'
-              : view === 'both' && degraded
-                ? 'flex-1 min-h-0 min-w-0'
-                : 'flex flex-col flex-1 min-h-0'
-          }
-          style={
-            view === 'both' && !degraded
-              ? { [orientation === 'landscape' ? 'width' : 'height']: `${split * 100}%` }
-              : undefined
-          }
-        >
-          <RelationGraph />
-        </div>
-      )}
+      {/* ── 工作区 (PanelGroup 分屏) ── */}
+      <div className="flex-1 min-h-0">
+        {view === 'graph' && (
+          <div className="w-full h-full"><RelationGraph /></div>
+        )}
 
-      {/* 拖动分屏 - 仅同显 + 非极值 */}
-      {view === 'both' && !degraded && (
-        <div
-          onMouseDown={onDragStart}
-          className={
-            orientation === 'landscape'
-              ? 'w-1.5 cursor-col-resize bg-border hover:bg-accent active:bg-accent shrink-0 self-stretch flex items-center justify-center transition-colors'
-              : 'h-1.5 cursor-row-resize bg-border hover:bg-accent active:bg-accent shrink-0 self-stretch flex items-center justify-center transition-colors'
-          }
-          title="拖动调整分屏比例"
-        >
-          {orientation === 'landscape'
-            ? <GripVertical className="w-3 h-3 text-text-muted" />
-            : <GripHorizontal className="w-3 h-3 text-text-muted" />}
-        </div>
-      )}
+        {view === 'list' && (
+          <div className="w-full h-full overflow-y-auto p-4 max-w-4xl mx-auto">
+            {listContent}
+          </div>
+        )}
 
-      {/* 列表视图: 单表模式 OR 同显模式 (含抽屉兜底) */}
-      {(view === 'list' || (view === 'both' && !degraded)) && (
-        <div
-          className={view === 'both' ? 'flex-1 min-h-0 min-w-0 overflow-y-auto' : 'space-y-3'}
-        >
-          {projectRelations.length === 0 && characters.length >= 2 && (
-            <div className="text-center py-16 text-text-muted">
-              <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
-              <p>还没有角色关系</p>
-              <p className="text-sm mt-1">点击「添加关系」开始定义角色间的关系</p>
-            </div>
-          )}
-          {projectRelations.length > 0 && (
-            <div className="space-y-3">
-              {projectRelations.map((rel) => {
-                const isEditing = editingId === rel.id
-                return (
-                  <div
-                    key={rel.id}
-                    className="bg-bg-surface border border-border rounded-lg p-4 hover:border-accent/30 transition-colors"
-                  >
-              {/* 关系概览行 */}
-              <div className="flex items-center gap-3 mb-3">
-                {/* 角色 A */}
-                <select
-                  value={rel.fromCharacterId}
-                  onChange={(e) =>
-                    updateRelation(rel.id!, { fromCharacterId: Number(e.target.value) })
-                  }
-                  className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary flex-1 max-w-[180px]"
-                >
-                  {characters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-
-                {/* 方向指示器 */}
-                <button
-                  onClick={() =>
-                    updateRelation(rel.id!, { isBidirectional: !rel.isBidirectional })
-                  }
-                  className="text-accent hover:text-accent/80 transition-colors"
-                  title={rel.isBidirectional ? '双向关系（点击改为单向）' : '单向关系（点击改为双向）'}
-                >
-                  {rel.isBidirectional ? (
-                    <ArrowRightLeft className="w-5 h-5" />
-                  ) : (
-                    <ArrowRight className="w-5 h-5" />
-                  )}
-                </button>
-
-                {/* 角色 B */}
-                <select
-                  value={rel.toCharacterId}
-                  onChange={(e) =>
-                    updateRelation(rel.id!, { toCharacterId: Number(e.target.value) })
-                  }
-                  className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary flex-1 max-w-[180px]"
-                >
-                  {characters.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-
-                {/* 关系类型 */}
-                <select
-                  value={rel.relationType}
-                  onChange={(e) =>
-                    updateRelation(rel.id!, { relationType: e.target.value as RelationType })
-                  }
-                  className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary"
-                >
-                  {RELATION_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-
-                {/* 展开/折叠 & 删除 */}
-                <button
-                  onClick={() => setEditingId(isEditing ? null : rel.id!)}
-                  className="text-xs text-text-muted hover:text-text-primary transition-colors"
-                >
-                  {isEditing ? '收起' : '编辑'}
-                </button>
-                <button
-                  onClick={() => deleteRelation(rel.id!)}
-                  className="text-text-muted hover:text-red-400 transition-colors"
-                  title="删除关系"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* 关系标签（始终显示） */}
-              <div className="flex items-center gap-2 text-sm text-text-secondary">
-                <span className="font-medium text-text-primary">{getCharacterName(rel.fromCharacterId)}</span>
-                <span className="text-accent">
-                  {rel.isBidirectional ? '⇄' : '→'}
-                </span>
-                <span className="font-medium text-text-primary">{getCharacterName(rel.toCharacterId)}</span>
-                <span className="text-text-muted">：</span>
-                {isEditing ? (
-                  <input
-                    value={rel.label}
-                    onChange={(e) => updateRelation(rel.id!, { label: e.target.value })}
-                    className="bg-bg-base border border-border rounded px-2 py-1 text-sm text-text-primary flex-1"
-                    placeholder="关系标签，如：父子、宿敌、暗恋对象"
-                  />
-                ) : (
-                  <span className="text-accent font-medium">{rel.label || '未命名关系'}</span>
-                )}
-              </div>
-
-              {/* 展开的编辑区域 */}
-              {isEditing && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <label className="block text-xs text-text-muted mb-1">关系描述</label>
-                  <textarea
-                    value={rel.description}
-                    onChange={(e) => updateRelation(rel.id!, { description: e.target.value })}
-                    rows={3}
-                    className="w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted resize-none focus:outline-none focus:border-accent"
-                    placeholder="描述这段关系的背景、变化、冲突等..."
-                  />
-                </div>
+        {view === 'both' && !degraded && (
+          <Group
+            orientation={orientation === 'portrait' ? 'vertical' : 'horizontal'}
+            defaultLayout={defaultLayout}
+            onLayoutChanged={onLayoutChanged}
+            className="w-full h-full"
+          >
+            <Panel id="graph" defaultSize={65} minSize={25} className="overflow-hidden">
+              <div className="w-full h-full"><RelationGraph /></div>
+            </Panel>
+            <Separator
+              className={`${orientation === 'portrait' ? 'h-1.5 w-full cursor-row-resize' : 'w-1.5 h-full cursor-col-resize'} bg-border hover:bg-accent active:bg-accent shrink-0 flex items-center justify-center transition-colors`}
+            >
+              {orientation === 'portrait' ? (
+                <GripHorizontal className="w-3 h-3 text-text-muted" />
+              ) : (
+                <GripVertical className="w-3 h-3 text-text-muted" />
               )}
-            </div>
-          )
-        })}
-            </div>
-          )}
-        </div>
-      )}
+            </Separator>
+            <Panel id="list" defaultSize={35} minSize={20} className="overflow-hidden">
+              <div className="w-full h-full overflow-y-auto p-4">
+                {listContent}
+              </div>
+            </Panel>
+          </Group>
+        )}
+
+        {view === 'both' && degraded && (
+          <div className="w-full h-full"><RelationGraph /></div>
+        )}
+      </div>
 
       {/* ── 抽屉降级: < 700px 时浮动按钮 + Drawer 显示列表 ── */}
       {degraded && (
@@ -567,113 +515,8 @@ export default function CharacterRelationPanel({ project }: Props) {
                     <X className="w-5 h-5" />
                   </button>
                 </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                  {projectRelations.length === 0 && characters.length >= 2 && (
-                    <div className="text-center py-16 text-text-muted">
-                      <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                      <p>还没有角色关系</p>
-                      <p className="text-sm mt-1">点击「添加关系」开始定义角色间的关系</p>
-                    </div>
-                  )}
-                  {projectRelations.map((rel) => {
-                    const isEditing = editingId === rel.id
-                    return (
-                      <div
-                        key={rel.id}
-                        className="bg-bg-surface border border-border rounded-lg p-4 hover:border-accent/30 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 mb-3">
-                          <select
-                            value={rel.fromCharacterId}
-                            onChange={(e) =>
-                              updateRelation(rel.id!, { fromCharacterId: Number(e.target.value) })
-                            }
-                            className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary flex-1 max-w-[180px]"
-                          >
-                            {characters.map((c) => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() =>
-                              updateRelation(rel.id!, { isBidirectional: !rel.isBidirectional })
-                            }
-                            className="text-accent hover:text-accent/80 transition-colors"
-                            title={rel.isBidirectional ? '双向关系（点击改为单向）' : '单向关系（点击改为双向）'}
-                          >
-                            {rel.isBidirectional ? (
-                              <ArrowRightLeft className="w-5 h-5" />
-                            ) : (
-                              <ArrowRight className="w-5 h-5" />
-                            )}
-                          </button>
-                          <select
-                            value={rel.toCharacterId}
-                            onChange={(e) =>
-                              updateRelation(rel.id!, { toCharacterId: Number(e.target.value) })
-                            }
-                            className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary flex-1 max-w-[180px]"
-                          >
-                            {characters.map((c) => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
-                          <select
-                            value={rel.relationType}
-                            onChange={(e) =>
-                              updateRelation(rel.id!, { relationType: e.target.value as RelationType })
-                            }
-                            className="bg-bg-base border border-border rounded px-2 py-1.5 text-sm text-text-primary"
-                          >
-                            {RELATION_TYPES.map((t) => (
-                              <option key={t.value} value={t.value}>{t.label}</option>
-                            ))}
-                          </select>
-                          <button
-                            onClick={() => setEditingId(isEditing ? null : rel.id!)}
-                            className="text-xs text-text-muted hover:text-text-primary transition-colors"
-                          >
-                            {isEditing ? '收起' : '编辑'}
-                          </button>
-                          <button
-                            onClick={() => deleteRelation(rel.id!)}
-                            className="text-text-muted hover:text-red-400 transition-colors"
-                            title="删除关系"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-text-secondary">
-                          <span className="font-medium text-text-primary">{getCharacterName(rel.fromCharacterId)}</span>
-                          <span className="text-accent">{rel.isBidirectional ? '⇄' : '→'}</span>
-                          <span className="font-medium text-text-primary">{getCharacterName(rel.toCharacterId)}</span>
-                          <span className="text-text-muted">：</span>
-                          {isEditing ? (
-                            <input
-                              value={rel.label}
-                              onChange={(e) => updateRelation(rel.id!, { label: e.target.value })}
-                              className="bg-bg-base border border-border rounded px-2 py-1 text-sm text-text-primary flex-1"
-                              placeholder="关系标签，如：父子、宿敌、暗恋对象"
-                            />
-                          ) : (
-                            <span className="text-accent font-medium">{rel.label || '未命名关系'}</span>
-                          )}
-                        </div>
-                        {isEditing && (
-                          <div className="mt-3 pt-3 border-t border-border">
-                            <label className="block text-xs text-text-muted mb-1">关系描述</label>
-                            <textarea
-                              value={rel.description}
-                              onChange={(e) => updateRelation(rel.id!, { description: e.target.value })}
-                              rows={3}
-                              className="w-full bg-bg-base border border-border rounded-lg px-3 py-2 text-sm text-text-primary placeholder-text-muted resize-none focus:outline-none focus:border-accent"
-                              placeholder="描述这段关系的背景、变化、冲突等..."
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                <div className="flex-1 overflow-y-auto p-4">
+                  {listContent}
                 </div>
               </div>
             </>

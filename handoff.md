@@ -705,3 +705,83 @@ useEffect(() => {
    - 建议后续独立 commit 处理
 
 3. **临时脚本清理**: 上次会话遗留 `tmp/_patch_*.py` × 15+ 文件, 本会话未新增, 等用户批准后批量删除
+
+## 2026-07-19 关系图 Layout 重构 — 上下文检查点
+
+### 当前状态
+- dev server 端口 **999** (用户禁止重启)
+- 浏览器: Chrome DevTools MCP (StoryForge localhost:999 + Gemini 9122a8b22405cdbe)
+- 协作 AI: Gemini 9122a8b22405cdbe
+- 最近 commit: f382acf docs(handoff): append 2026-07-18 5 项 UX 改进记录
+- 分支: main, 工作树 clean
+
+### 上一会话遗留 4 bug
+1. 竖布局当前下半截没有: panel.height(3912) > panel.width(1425) 永远 portrait, 即使 viewport 是 landscape
+2. divider 拖不动: 6px row-resize 太小 + clamp 公式 bug
+3. listWrap 不自滚: main 是 overflow-y-auto → list 撑高 3207 → main 滚 (3960 vs 1080)
+4. 横竖不自动切换: orientation 误判连锁
+
+### 关键发现 (main 不能动)
+- WorkspacePage.tsx:290 <main className="flex-1 overflow-y-auto p-6 relative"> 被 26 个子模块依赖滚动
+- main 内只有 2 个 child: 右上角 <button> (absolute 不占流) + <Suspense>{renderMainPanel()}</Suspense> (就是我)
+- 推翻 Gemini 之前否决方案 A 的理由: main 里没有其他需要参与排版的兄弟节点
+
+### Gemini 最终方案 (9122a8b22405cdbe 已确认)
+
+#### 根容器: absolute inset-6 (脱离文档流 + 保留 main 原 24px 边距)
+```tsx
+<div
+  ref={containerRef}
+  className="absolute inset-6 flex flex-col overflow-hidden bg-bg-base border border-border rounded-lg shadow-sm"
+>
+  ...
+</div>
+```
+- absolute: 脱离 main 的 overflow-y-auto 流, 永远不会被 list 撑爆
+- inset-6: 等价 top:24px;right:24px;bottom:24px;left:24px, 保留 main 原 p-6 视觉
+- overflow-hidden: 内部防溢出
+
+#### ResizeObserver 测这个根容器
+- 拿到的是 main clientHeight - 48px (p-6 减除), 绝对稳定
+- 触发 orientation flip 时仅在 height > width
+
+#### PanelGroup 结构
+```tsx
+<PanelGroup direction={isPortrait ? "vertical" : "horizontal"} autoSaveId="storyforge-graph">
+  <Panel defaultSize={65} minSize={30}>...Graph...</Panel>
+  <PanelResizeHandle className="...cursor-row|col-resize..." />
+  <Panel defaultSize={35} minSize={20}>...List...</Panel>
+</PanelGroup>
+```
+
+#### 抽屉降级 (< 700px)
+- view === both && graphWidth < 700 → Drawer + FAB
+- PanelGroup 卸载, 只渲染 Graph
+
+#### 关键修正 (Gemini 最后两点)
+1. inset-6 vs inset-0: 选 inset-6, 保留 24px 视觉边距 (和原页面一致)
+2. z-index: main 里 <button> (属性面板切换) 也是 absolute, Panel 在后渲染会盖住它 → 给该 button 加 z-50 (不归本任务, 等用户单独决定)
+
+### 实施计划 (待用户拍板)
+1. 安装依赖: `npm install react-resizable-panels@^4.12.2`
+2. 备份: `cp src/components/relations/CharacterRelationPanel.tsx tmp/code-backups/<ts>.pre-resize-arch`
+3. 重构 CharacterRelationPanel.tsx:
+   - 移除手写的 split / draggingRef / splitRef / onDragStart / LS_SPLIT / loadLS
+   - 移除手写的 divider JSX
+   - 保留 view 三按钮 (同显 / 仅图 / 仅表)
+   - 根容器改为 absolute inset-6 flex flex-col overflow-hidden
+   - 引入 PanelGroup / Panel / PanelResizeHandle (autoSaveId="storyforge-graph")
+   - 保留抽屉降级逻辑 (FAB + Drawer)
+4. 删除 sf_relationgraph_split localStorage key (用 autoSaveId 替代)
+5. TSC 验证 (CharacterRelationPanel.tsx 0 错误)
+6. 浏览器实测 3 种状态: Landscape 1703×1080 / Portrait 600×800 / 极端 < 700px
+7. Console 检查 (无 React warning, 无 resize loop error)
+8. Commit + push + 更新 handoff.md
+
+### 关键约束 (再次强调)
+- **不允许** 修改 WorkspacePage.tsx 的 <main> 元素
+- **必须保留** 抽屉降级逻辑 (< 700px FAB + Drawer)
+- **必须保留** 视图切换三按钮
+- **必须使用** react-resizable-panels 4.12.2
+- dev server **不要重启** (端口 999 持续运行)
+- commit message 中文

@@ -785,3 +785,36 @@ useEffect(() => {
 - **必须使用** react-resizable-panels 4.12.2
 - dev server **不要重启** (端口 999 持续运行)
 - commit message 中文
+
+## 2026-07-19 关系图 Layout Bug 修复
+
+### 触发条件
+上次 commit 253dfe8 (absolute inset-6 + react-resizable-panels 重构) 后,
+实测 canvas 高度仍只有 600px, 父级 Panel 994px 丢了 331px。
+
+### 根因 (Bug 1)
+Panel 内的 wrapper 是 `<div className="w-full h-full">` (display: block)。
+RelationGraph 根 div 用 `flex flex-col flex-1 min-h-0`, 但父级不是 flex 容器,
+flex-1 在 block 父级里不生效, 根 div 按内容高度计算 (663px), 丢了 331px。
+
+### 根因 (Bug 2)
+`RelationGraph.tsx:344` `onZoom` 回调在 ForceGraph2D render 期间同步 setZoom,
+触发 React 18 警告: `Cannot update a component (RelationGraph) while rendering
+a different component (ForceGraph2D)`。
+
+### 修复 (commit 553bb99)
+1. `CharacterRelationPanel.tsx` 3 处 wrapper 加 `flex flex-col`
+   - view === 'graph'
+   - view === 'both' && !degraded (Panel id="graph")
+   - view === 'both' && degraded
+2. `RelationGraph.tsx:343-348` onZoom 用 queueMicrotask 包 setState
+
+### 验证
+- canvas 高度 600 → 931 (横屏 landscape 994 - 控件 63 = 931, 100% 撑满)
+- console 0 React error
+- 切换力导向/放射/树状布局都正常, canvas 尺寸稳定
+- TSC 0 新增错误 (3 个 pre-existing 错误与本修复无关)
+
+### 备份
+- tmp/code-backups/CharacterRelationPanel.tsx.pre-fix-flex-bug
+- tmp/code-backups/RelationGraph.tsx.pre-fix-flex-bug

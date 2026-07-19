@@ -341,7 +341,12 @@ interface Props { width?: number; height?: number }
     n.fy = n.y
   }, [])
   const onZoom = useCallback(() => {
-    if (graphRef.current) setZoom(graphRef.current.zoom())
+    // ForceGraph2D 会在自身 render 期间回调 onZoom；同步 setZoom 会触发 React 18 的
+    // "Cannot update a component while rendering a different component" 警告。
+    // 推到 microtask：render 退出后再 dispatch setState，警告消失，状态语义不变。
+    const fg = graphRef.current
+    if (!fg) return
+    queueMicrotask(() => setZoom(fg.zoom() ?? 1))
   }, [])
   const handleZoomToFit = useCallback(() => {
     graphRef.current?.zoomToFit(400, 40)
@@ -751,5 +756,4 @@ function processLinks(links: GraphLink[]): GraphLink[] {
   }
   return links
 }
-
 

@@ -438,7 +438,7 @@ export default function CharacterRelationPanel({ project }: Props) {
       {/* ── 工作区 (PanelGroup 分屏) ── */}
       <div className="flex-1 min-h-0">
         {view === 'graph' && (
-          <div className="w-full h-full"><RelationGraph /></div>
+          <div className="w-full h-full flex flex-col"><RelationGraph /></div>
         )}
 
         {view === 'list' && (
@@ -455,7 +455,7 @@ export default function CharacterRelationPanel({ project }: Props) {
             className="w-full h-full"
           >
             <Panel id="graph" defaultSize={65} minSize={25} className="overflow-hidden">
-              <div className="w-full h-full"><RelationGraph /></div>
+              <div className="w-full h-full flex flex-col"><RelationGraph /></div>
             </Panel>
             <Separator
               className={`${orientation === 'portrait' ? 'h-1.5 w-full cursor-row-resize' : 'w-1.5 h-full cursor-col-resize'} bg-border hover:bg-accent active:bg-accent shrink-0 flex items-center justify-center transition-colors`}
@@ -475,7 +475,7 @@ export default function CharacterRelationPanel({ project }: Props) {
         )}
 
         {view === 'both' && degraded && (
-          <div className="w-full h-full"><RelationGraph /></div>
+          <div className="w-full h-full flex flex-col"><RelationGraph /></div>
         )}
       </div>
 

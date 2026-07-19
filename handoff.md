@@ -883,3 +883,54 @@ state.zoom.translateTo(state.zoom.__baseElem, x, y, ...)
 
 ## 后续
 - cover 模式不动（用户最新指示）
+
+---
+
+# StoryForge 关系图筛选 + checkbox 位置改进 - 2026-07-19
+
+**项目**: D:/Documents/VibeCoding/storyforge | 分支: main
+**服务端口**: 999 | URL: http://localhost:999/storyforge/workspace/1
+
+## 目标
+按用户反馈完善关系图筛选 + checkbox 拖动干扰问题 + checkbox 位置美化
+
+## 本轮 3 项改动
+
+### 1. drag 不再被打断（问题 1 修复）
+- 之前 multi 模式下，点节点 body 会 toggle 选中 -> 触发 re-render -> 打断 d3-drag
+- 现在 handleNodeClick 接 event 参数，multi 模式下用 screen2GraphCoords 反推图坐标
+- 只有命中 checkbox 区域才 toggle；命中 body 一律 return（沉默）
+- React state 不变 -> force-graph 不 re-render -> drag 不受影响
+
+### 2. checkbox 移到右上角（Gemini 方案 F）
+- 之前 cbX=x+3, cbY=y+5.5 与头像重叠 9.1px
+- 现在 cbX = node.x + cardW/2 - cbSize - padding, cbY = node.y - cardH/2 + padding
+- 右上固定锚点，与 avatarR/cardW 临界值解耦（不会跳）
+- 完全不挡头像
+
+### 3. cardW/cardH 缓存到 node 供 hit test 共用
+- PositionedNode 类型加 cardW?/cardH? 字段
+- drawNode 渲染时缓存 node.cardW = cardW, node.cardH = cardH
+- handleNodeClick 通过 calcCheckboxRect(node) 读取同一份数据
+- 用 ?? 兜底（35/50）以防 drawNode 尚未跑过
+
+## 关键代码位置
+- src/components/relations/RelationGraph.tsx:71 类型扩展
+- src/components/relations/RelationGraph.tsx:77-90 calcCheckboxRect helper
+- src/components/relations/RelationGraph.tsx:478-505 handleNodeClick event hit test
+- src/components/relations/RelationGraph.tsx:654-655 cardW/cardH 缓存
+- src/components/relations/RelationGraph.tsx:667 drawNode 用 calcCheckboxRect
+
+## Gemini 对话 ID
+https://gemini.google.com/app/4fac77e442b01914 (同会话继续追问)
+
+## 验证
+- TS 检查：3 个 pre-existing 错误（不动），0 新增
+- 截图：checkbox 出现在节点右上角（视觉确认）
+- drag 不被打断：body 点击不再触发 state 变化
+- 手动验证（需用户）：click 命中 checkbox 才 toggle
+
+## 约束遵守
+- dev port 999 不重启 ✅
+- 不动全局 AGENTS.md
+- 备份：tmp/code-backups/RelationGraph.tsx.20260719_115427.bak

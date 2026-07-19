@@ -68,10 +68,25 @@ interface GraphLink {
   source: string; target: string; type: string
   bidirectional: boolean; label: string; color: string; curvature?: number
 }
-type PositionedNode = GraphNode & { x: number; y: number }
+type PositionedNode = GraphNode & { x: number; y: number; cardW?: number; cardH?: number }
 type PositionedLink = GraphLink & { source: PositionedNode; target: PositionedNode }
 function getInitial(name: string): string {
   return name.charAt(0)
+}
+
+// 复选框矩形计算：drawNode 渲染与 onNodeClick hit test 共用。
+// Gemini 方案 F：右上角固定锚点（cbX = 卡片右 - cbSize - padding, cbY = 卡片上 + padding），
+// 与 avatarR/cardW 临界值解耦，物理引擎调整位置时不会跳。
+function calcCheckboxRect(node: PositionedNode) {
+  const cardW = node.cardW ?? 35  // drawNode 尚未跑过时的兜底
+  const cardH = node.cardH ?? 50
+  const cbSize = 11
+  const padding = 3
+  return {
+    cbX: node.x + cardW / 2 - cbSize - padding,
+    cbY: node.y - cardH / 2 + padding,
+    cbSize,
+  }
 }
 interface Props { width?: number; height?: number }
  export default function RelationGraph({ width: _initialWidth, height: _initialHeight }: Props) {
@@ -271,6 +286,11 @@ interface Props { width?: number; height?: number }
   const fitModeRef = useRef<'contain' | 'cover'>(fitMode)
   const [physicsOpen, setPhysicsOpen] = useState(false)
   const physicsRef = useRef<HTMLDivElement>(null)
+  // 链接筛选模式：单选/多选；多选时节点左上内侧显示 checkbox
+  // 链接筛选模式：单选/多选；多选时节点右上内侧显示 checkbox（Gemini 方案 F：右上固定锚点）
+  const [selectMode, setSelectMode] = useState<'single' | 'multi'>('single')
+  // 当前筛选的角色 id 集合（空集合 = 全显）
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   // 力导向模式可调参数
   const [chargeStrength, setChargeStrength] = useState(-900)
   const [linkDistance, setLinkDistance]   = useState(150)
@@ -437,11 +457,67 @@ interface Props { width?: number; height?: number }
       const nodes = prev.nodes.map(n => { const { fx, fy, ...rest } = n; return rest })
       return { ...prev, nodes }
     })
+    // 多选模式下"重置布局"同时清空筛选勾选（按用户最新指示）
+    setSelectedIds(prev => prev.size > 0 ? new Set() : prev)
     setTimeout(() => {
       const fg = graphRef.current as unknown as { d3ReheatSimulation?: () => void } | undefined
       fg?.d3ReheatSimulation?.()
     }, 50)
   }, [])
+  // 链接是否可见：selectedIds 空 -> 全显；非空 -> 只显与选中节点相关的 link
+  // force-graph 在 d3-force 阶段会把 link.source 从 string id 替换为 PositionedNode 对象引用，
+  // 所以这里要兼容两种类型：用 String(...) 兜底
+  const isLinkVisible = useCallback((link: GraphLink): boolean => {
+    if (selectedIds.size === 0) return true
+    const srcId = typeof link.source === 'object' && link.source !== null ? (link.source as { id: string }).id : link.source
+    const tgtId = typeof link.target === 'object' && link.target !== null ? (link.target as { id: string }).id : link.target
+    return selectedIds.has(srcId) || selectedIds.has(tgtId)
+  }, [selectedIds])
+  // 节点是否被选中
+  const isNodeSelected = useCallback((id: string): boolean => selectedIds.has(id), [selectedIds])
+  // 节点点击
+  const handleNodeClick = useCallback((node: unknown, event?: MouseEvent) => {
+    const n = node as PositionedNode
+    if (selectMode === 'single') {
+      // 单选：设置而非 toggle；再点同一节点保持选中（避免拖动误触取消）
+      setSelectedIds(prev => prev.has(n.id) && prev.size === 1 ? prev : new Set([n.id]))
+    } else {
+      // multi 模式：只有命中 checkbox 区域才 toggle；命中节点 body 一律 return
+      // —— 避免 React re-render 打断 d3-drag 的 dragstart 流程（用户反馈"再点击拖动被取消"）
+      if (!event) return
+      const fg = graphRef.current as unknown as {
+        screen2GraphCoords?: (x: number, y: number) => { x: number; y: number } | undefined
+      } | null | undefined
+      const coords = fg?.screen2GraphCoords?.(event.clientX, event.clientY)
+      if (!coords) return
+      const { cbX, cbY, cbSize } = calcCheckboxRect(n)
+      if (coords.x < cbX || coords.x > cbX + cbSize || coords.y < cbY || coords.y > cbY + cbSize) {
+        // 命中节点 body（不是 checkbox）→ 沉默，不响应，让 force-graph 走 drag 逻辑
+        return
+      }
+      // 命中 checkbox → toggle
+      setSelectedIds(prev => {
+        const next = new Set(prev)
+        if (next.has(n.id)) next.delete(n.id)
+        else next.add(n.id)
+        return next
+      })
+    }
+  }, [selectMode])
+  // 背景点击：仅单选模式清空（多选模式避免误触清空）
+  const handleBackgroundClick = useCallback(() => {
+    if (selectMode === 'single') setSelectedIds(new Set())
+  }, [selectMode])
+  // 当前可见关系数（用于状态显示）
+  // link.source/target 在 graphData state 里仍是 string id（d3-force 替换前），所以这里直接 String(id) 比较
+  const visibleLinkCount = useMemo(() => {
+    if (selectedIds.size === 0) return graphData.links.length
+    return graphData.links.filter(l => {
+      const srcId = typeof l.source === 'object' && l.source !== null ? (l.source as { id: string }).id : l.source
+      const tgtId = typeof l.target === 'object' && l.target !== null ? (l.target as { id: string }).id : l.target
+      return selectedIds.has(srcId) || selectedIds.has(tgtId)
+    }).length
+  }, [graphData.links, selectedIds])
   // 拖动结束：固定节点坐标，物理引擎不再拉回
   const handleNodeDragEnd = useCallback((node: unknown) => {
     const n = node as PositionedNode
@@ -575,6 +651,9 @@ interface Props { width?: number; height?: number }
     const cntW = ctx.measureText(`${count}条关系`).width
     const cardW = Math.max(nameW, tagW, cntW) + padX * 2
     const cardH = avatarR * 2 + padY * 2 + fontSize + subFontSize * 1.5 + 4
+    // 缓存节点尺寸供 onNodeClick hit test 共用（Gemini 方案 F：右上角固定锚点）
+    node.cardW = cardW
+    node.cardH = cardH
     const x = node.x - cardW / 2
     const y = node.y - cardH / 2
     // 卡片背景（半透明深色）
@@ -582,6 +661,35 @@ interface Props { width?: number; height?: number }
     ctx.beginPath()
     ctx.roundRect(x, y, cardW, cardH, 6)
     ctx.fill()
+    // 多选模式：节点右上内侧画 checkbox（Gemini 方案 F：右上固定锚点，不挡头像）
+    // 选中态仅靠 checkbox 区分，不画 amber 描边避免与 checkbox 同色混淆
+    if (selectMode === 'multi') {
+      const checked = isNodeSelected(node.id)
+      const { cbX, cbY, cbSize } = calcCheckboxRect(node)
+      // 背景：勾选态 amber，未勾选态白底
+      ctx.fillStyle = checked ? '#fbbf24' : 'rgba(255, 255, 255, 0.92)'
+      ctx.beginPath()
+      ctx.roundRect(cbX, cbY, cbSize, cbSize, 2)
+      ctx.fill()
+      // 边框
+      ctx.strokeStyle = checked ? '#b45309' : '#475569'
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.roundRect(cbX + 0.5, cbY + 0.5, cbSize - 1, cbSize - 1, 2)
+      ctx.stroke()
+      // 勾
+      if (checked) {
+        ctx.strokeStyle = '#1f2937'
+        ctx.lineWidth = 1.8
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.beginPath()
+        ctx.moveTo(cbX + 2.5, cbY + cbSize / 2)
+        ctx.lineTo(cbX + cbSize / 2 - 0.5, cbY + cbSize - 3)
+        ctx.lineTo(cbX + cbSize - 2, cbY + 2.5)
+        ctx.stroke()
+      }
+    }
     // 仅保留顶部阵营色条（去掉外框线，色条就是该角色的阵营标签）
     const barH = 2.5
     // 顶部关系类型分段色条（Segmented Bar）
@@ -625,7 +733,7 @@ interface Props { width?: number; height?: number }
       ctx.fillStyle = '#64748b'
       ctx.fillText(`${count}条关系`, cx, y + padY + avatarR * 2 + fontSize + subFontSize * 2)
     }
-  }, [characters, relCountMap, nodeFontSize])
+  }, [characters, relCountMap, nodeFontSize, isNodeSelected, selectMode])
   // 增大节点点击/拖拽响应区：用一个隐形大圆覆盖视觉卡片，避免边缘拖不到
   const nodePointerAreaPaint = useCallback((rawNode: unknown, color: string, ctx: CanvasRenderingContext2D) => {
     const node = rawNode as PositionedNode
@@ -637,6 +745,8 @@ interface Props { width?: number; height?: number }
   }, [linkFontSize])
   const drawLink = useCallback((rawLink: unknown, ctx: CanvasRenderingContext2D, _globalScale: number) => {
     const link = rawLink as PositionedLink
+    // 链接筛选：不在 selectedIds 范围内的 link 不画文字（弧线已由 linkWidth=0 隐藏）
+    if (!isLinkVisible(link)) return
     const start = link.source
     const end = link.target
     if (!start || !end || !start.x || !end.x) return
@@ -678,7 +788,7 @@ interface Props { width?: number; height?: number }
       ctx.fillStyle = '#94a3b8'
       ctx.fillText(longLabel.length > 14 ? longLabel.slice(0, 14) + '…' : longLabel, textX, textY + lblFont * 0.8)
     }
-  }, [linkFontSize])
+  }, [linkFontSize, isLinkVisible])
   return (
     <div className="rounded-lg overflow-hidden border border-border bg-bg-base relative flex flex-col flex-1 min-h-0">
       {characters.length === 0 && (
@@ -760,6 +870,23 @@ interface Props { width?: number; height?: number }
             )}
           </div>
         )}
+        {/* 链接筛选模式：单选 vs 多选 */}
+        <div className="flex items-center gap-1 ml-2 pl-2 border-l border-border">
+          <span className="text-xs text-text-muted">筛选</span>
+          <button
+            onClick={() => { setSelectMode('single'); setSelectedIds(new Set()) }}
+            className={"px-2 py-0.5 text-xs rounded transition-colors " + (selectMode === 'single' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary hover:bg-bg-hover')}
+            title="单选模式：点节点只显示与该角色相关的链接；点空白取消筛选"
+          >单选</button>
+          <button
+            onClick={() => setSelectMode('multi')}
+            className={"px-2 py-0.5 text-xs rounded transition-colors " + (selectMode === 'multi' ? 'bg-accent text-white' : 'text-text-muted hover:text-text-primary hover:bg-bg-hover')}
+            title="多选模式：每个节点右上内侧 checkbox 可勾选，点空白不清空，用 ⟳ 重置清空。点节点 body 不响应任何事（避免打断拖动）"
+          >多选</button>
+          {selectedIds.size > 0 && (
+            <span className="text-xs text-accent ml-1 tabular-nums">显示 {visibleLinkCount} / {graphData.links.length} 条</span>
+          )}
+        </div>
       </div>
       {/* 右上角：浮动垂直控制台 (Floating Action Column)
           - Gemini 推荐 pattern：flex-col 垂直堆叠，避免与中部布局栏横向冲突
@@ -796,12 +923,12 @@ interface Props { width?: number; height?: number }
             <span className="text-xs text-text-muted w-8 text-right">{linkFontSize}px</span>
           </div>
         </div>
-        {/* 重置布局：解锁所有已拖动节点，让物理引擎重新接管 */}
+        {/* 重置布局：解锁所有已拖动节点 + 清空多选勾选 + 重热力引擎 */}
         <button
           onClick={handleResetLayout}
-          disabled={!hasLockedNodes}
+          disabled={!hasLockedNodes && selectedIds.size === 0}
           className="w-7 h-7 flex items-center justify-center rounded bg-bg-base/80 border border-border text-text hover:text-text-bright hover:border-accent disabled:opacity-30 disabled:cursor-not-allowed text-base font-bold backdrop-blur"
-          title={hasLockedNodes ? '重置布局：解锁所有节点' : '当前没有锁定的节点'}
+          title={hasLockedNodes || selectedIds.size > 0 ? '重置：解锁所有节点 + 清空多选勾选 + 重热力引擎' : '当前没有可重置的内容'}
         >⟳</button>
         {/* 缩放按钮组 */}
         <div className="flex flex-col gap-1">
@@ -850,9 +977,15 @@ interface Props { width?: number; height?: number }
             linkCanvasObject={drawLink}
             linkCanvasObjectMode={() => 'after'}
             linkCurvature="curvature"
-            linkColor={(link: object) => ((link as GraphLink).color + 'aa')}
-            linkWidth={1.5}
-            linkDirectionalArrowLength={(link: object) => ((link as GraphLink).bidirectional ? 0 : Math.max(3, 6))}
+            linkColor={(link: object) => {
+              const l = link as GraphLink
+              return isLinkVisible(l) ? (l.color + 'aa') : 'rgba(0,0,0,0)'
+            }}
+            linkWidth={(link: object) => isLinkVisible(link as GraphLink) ? 1.5 : 0}
+            linkDirectionalArrowLength={(link: object) => {
+              const l = link as GraphLink
+              return isLinkVisible(l) ? (l.bidirectional ? 0 : Math.max(3, 6)) : 0
+            }}
             linkDirectionalArrowRelPos={0.85}
             // 首帧稳定：后台预热 100 ticks，第一帧就是散开的最终形态
             warmupTicks={100}
@@ -864,6 +997,8 @@ interface Props { width?: number; height?: number }
             enableNodeDrag
             enableZoomInteraction
             onZoom={onZoom}
+            onNodeClick={handleNodeClick}
+            onBackgroundClick={handleBackgroundClick}
             onNodeDrag={handleNodeDrag}
             onNodeDragEnd={handleNodeDragEnd}
             minZoom={0.1}

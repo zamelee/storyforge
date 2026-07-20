@@ -7,6 +7,7 @@ import { useCharacterStore } from '../../stores/character'
 import { useWorldGroupStore } from '../../stores/world-group'
 import { useAIConfigStore } from '../../stores/ai-config'
 import { useAIStream } from '../../hooks/useAIStream'
+import { useToast } from '../shared/Toast'
 import { createAISessionKey } from '../../stores/ai-generation-session'
 import { buildCharacterPrompt, buildCharacterSupplementPrompt } from '../../lib/ai/adapters/character-adapter'
 import { parseCharacterOutput, parseRelationshipsFromText, splitCharacterSections, type ParsedCharacter, type ParsedRelationshipsOutput } from '../../lib/ai/parse-character-output'
@@ -148,6 +149,7 @@ const [reviewData, setReviewData] = useState<{
 } | null>(null)
 const [fieldChecked, setFieldChecked] = useState<Record<string, boolean>>({})
 const { addRelation } = useCharacterRelationStore()
+  const toast = useToast()
   const ai = useAIStream(createAISessionKey(
     project.id!,
     'character.generate',
@@ -288,9 +290,17 @@ const { addRelation } = useCharacterRelationStore()
 
   // 采纳：解析并打开逐字段审查弹层
   const handleSupplementAccept = async (text: string) => {
-    if (!supplementCharId) return
+    if (!supplementCharId) {
+      // 补全会话已丢失（HMR 触发 / 切换了角色）—— 不要静默 return，否则用户看不到反馈以为按钮坏了
+      toast.error('补全会话已丢失，请回到角色详情重新点击「补全」')
+      return
+    }
     const targetChar = characters.find(c => c.id === supplementCharId)
-    if (!targetChar) return
+    if (!targetChar) {
+      // 源角色已不在角色库里（被删除 / 切换项目），同样给提示
+      toast.error('目标角色不存在（可能已被删除）')
+      return
+    }
     aiSupp.reset()
     setParsing(true)
     const parsed = await parseCharacterOutput(text, aiConfig, targetChar.name)  // B fix: 注入已知角色名,避免第二次 LLM 抽取 name 字段抽风

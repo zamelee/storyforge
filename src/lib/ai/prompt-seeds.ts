@@ -337,16 +337,19 @@ export const SYSTEM_PROMPT_SEEDS: PromptSeed[] = [
 【关系类型中文】角色名：关系描述
 其中关系类型中文必须与 relationType 对应：family=亲属、lover=恋人、friend=朋友、rival=对手、enemy=敌人、master=师父、student=弟子、ally=盟友、subordinate=上下级、other=其他。
 
-输出格式：
-先输出 {{characterName}} 的补全内容（只写缺失字段），直接 Markdown，不要加标题或说明。
-
-然后在结尾输出如下 JSON 代码块（关系网写入用，每条关系的 from/to 必须是参考人物中已存在的角色名）：
+输出格式（严格按顺序，第一行必须出现角色名）：
+1. **首行**： \`# {{characterName}}\`（客户端严格解析这一行作为 name 字段，不再依赖二次抽取）
+2. **Markdown 正文**： {{characterName}} 的补全内容（只写缺失字段）。
+3. **结尾 JSON 代码块**：结构化关系网（顶层同时给 name 和每条关系的 fromName，便于客户端交叉校验）：
 \`\`\`json
 {
-  "relationships_text": "【盟友】林知夏：一起对抗顾承曜的商业施压。",
+  "name": "{{characterName}}",
+  "fromName": "{{characterName}}",
+  "relationships_text": "【盟友】沈见微：一起对抗顾承曜的商业施压。",
   "relationships_json": [
     {
-      "toName": "林知夏",
+      "fromName": "{{characterName}}",
+      "toName": "沈见微",
       "relationType": "ally",
       "label": "坚定同盟",
       "description": "一起对抗顾承曜的商业施压",

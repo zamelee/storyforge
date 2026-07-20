@@ -1065,3 +1065,25 @@ https://gemini.google.com/app/4fac77e442b01914 (同会话继续追问)
 
 ### 用户确认
 2026-07-20 用户确认「跑通了」, 双保险策略生效。
+
+## 安全边界 (Safety Boundaries)
+
+### 远程仓库禁令 (2026-07-20 用户明确强调)
+
+- **绝对不向 yuanbw remote 推送任何 commit**
+  - yuanbw remote URL: https://github.com/yuanbw2025/storyforge.git
+  - 这是原作者仓库,**任何 push 操作都会污染原作者的 main 分支**
+  - 即使是 "对齐两端" "同步给原作者看" 等好听理由,也不准
+  - 只允许: `git fetch yuanbw` (只读,对比差异), 严禁 `git push yuanbw`
+- **只允许向 origin (zamelee/storyforge.git) 推送**
+  - 这是用户自己的 fork, 可自由推送
+
+### 备份 / 清理 / 操作原则
+- 备份: tmp/code-backups/ 永久保留 (本项目惯例, 不删)
+- 临时脚本: tmp/_*.py 一律带下划线前缀, 用完提议用户清理, 不自动删
+- 大文件改动: 优先用 Node REPL (避免 shell 转义陷阱), 用 apply_patch 时严格按 unified diff 格式
+- TS 模板字符串内反引号: 必须 `\`` 转义, 否则 esbuild 报 syntax error
+
+### 显性归属 (从全局 AGENTS.md §8 继承)
+- 本项目: D:/Documents/VibeCoding/storyforge (纯前端, React + IndexedDB)
+- 不要管: D:/Documents/VibeCoding/storyforge-server (另一个对话的责任)

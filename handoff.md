@@ -1006,3 +1006,62 @@ https://gemini.google.com/app/4fac77e442b01914 (同会话继续追问)
 - **运行时重复最可能的来源**: 某个早期版本或迁移把 system 模板克隆成 user 模板，但 UI 用 system 图标统一渲染，没区分 system/user
 - **待核实点**: promptTemplates 表里的 isSystem / isBuiltin 字段实际值，渲染层的 icon 取值逻辑
 
+
+## 2026-07-20 角色补全抽风闭环 (B fix + D fix)
+
+### 用户报告
+「角色生成 → 补全 → 采纳」偶发弹「角色名不匹配」, 且按钮点不了。
+
+### 根因链
+1. character.supplement 提示词未要求 LLM 显式输出角色名 (Markdown 用 **外貌:**...**性格:**... 格式, 无 name 字段)
+2. parseCharacterOutput 二次抽取拿不到 name → 返回 'AI 生成角色'
+3. strict check parsed.name !== targetChar.name 永远不通过 → alert 阻塞
+4. alert accept 后紧跟 return, 函数退出, HMR 又重置 state (supplementCharId = null)
+5. 用户再点「采纳」 → handleSupplementAccept 第一行 if (!supplementCharId) return 静默退出 → 没反应
+
+### 修复 (双保险)
+
+#### B fix (commit 4356c89)
+- parse-character-output.ts 加 expectedName?: string 参数
+- systemPrompt 加 hint: 有 expectedName 必须用它作 name, 不要猜
+- 返回时确定性覆写: (expectedName && expectedName.trim()) ? expectedName.trim() : (...)
+- CharacterPanel.tsx 调用处传 targetChar.name
+
+#### D fix (commit f30ec4c)
+- 修复 #1 (治本): prompt-seeds.ts character.supplement 输出格式改 3 步
+  1. 首行 `# {{characterName}}` (client 严格解析这一行作为 name)
+  2. Markdown 正文
+  3. JSON 顶层加 name + fromName, 每条 relationship 加 fromName
+- 修复 #2 (治 UX): handleSupplementAccept 不再静默 return
+  - !supplementCharId → toast.error('补全会话已丢失...')
+  - !targetChar → toast.error('目标角色不存在...')
+  - 即使 HMR 重置 state, 用户也得到反馈
+
+### 双保险覆盖矩阵
+- 主路径: prompt 显式 name → 二次抽取拿得到 → strict check 通过
+- 兜底: 客户端 expectedName 注入 → 即使 LLM 抽风也走通
+- 体验: 状态丢失时 toast 提示, 不静默退出
+
+### 关键代码位置
+- src/lib/ai/prompt-seeds.ts:340-360 (输出格式 + JSON 模板)
+- src/lib/ai/parse-character-output.ts:86 (签名), 110 (hint), 134 (强制覆写)
+- src/components/character/CharacterPanel.tsx:10 (import useToast), 152 (toast hook), 293-303 (toast 替代静默 return), 296 (传 expectedName)
+
+### 验证
+- TS 检查: 两文件 esbuild transform 通过
+- 浏览器实测 (林知夏补全): LLM 输出首行 # 林知夏, JSON 含 name: 林知夏, 采纳后直接进逐字段审查弹层
+- HMR 重置后用户可见 toast 提示, 不再是死按钮
+
+### 预写备份
+- tmp/code-backups/parse-character-output.ts.202607200843134.bak (6695 bytes)
+- tmp/code-backups/CharacterPanel.tsx.202607200843238.bak (42959 bytes, B fix 前)
+- tmp/code-backups/prompt-seeds.ts.202607200859044.bak (88371 bytes, D fix 前)
+- tmp/code-backups/CharacterPanel.tsx.202607200900049.bak (43054 bytes, D fix 前)
+
+### 约束遵守
+- dev port 999 不重启
+- 不动全局 AGENTS.md
+- prompt-seeds.ts 因新增反引号 escape, 第二次编辑时遇到一次 TS 语法错, 已修
+
+### 用户确认
+2026-07-20 用户确认「跑通了」, 双保险策略生效。

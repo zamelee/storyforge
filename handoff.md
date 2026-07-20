@@ -977,3 +977,32 @@ https://gemini.google.com/app/4fac77e442b01914 (同会话继续追问)
 ## 约束遵守
 - dev port 999 不重启
 - 备份: tmp/code-backups/RelationGraph.tsx.20260720_153337.bak
+
+## 2026-07-20 消账
+
+### A. 关系图筛选 — 已闭环
+- commit `592c6f4` "fix(relation-graph): 关系图筛选 + checkbox 位置改进" (2026-07-19)
+- 多选模式下点节点 body 不再打断 d3-drag，checkbox 移到右上角固定锚点 (Gemini 方案 F)
+- handoff 现有专门条目: `# StoryForge 关系图筛选 + checkbox 位置改进 - 2026-07-19`
+
+### B. 连线文字重叠 — 已闭环 (两个 commit 合力)
+- commit `caa5ab3` "feat(relation-graph): curved parallel links for multi-relation pairs" (2026-07-17)
+  - **此前漏写独立消账条目，本次补登**
+  - 同一对角色多条关系 (如 沈见微↔林知夏 的 恋人/朋友/亲属) 折成平行弧线，不再叠成一根直线
+  - `processLinks` 按 sorted[source,target] 分组，`curvature = (i - (n-1)/2) * 0.25`，奇数中间线 curvature=0
+  - drawLink 改为算 bezier `B(0.5) = 0.25*P0 + 0.5*ctrl + 0.25*P2` 顶点放标签
+  - ForceGraph2D `linkCanvasObjectMode: 'after'` + `linkCurvature` + `linkColor(alpha)` + `linkWidth`，让内置渲染器画弧和箭头，本组件只画 label
+- commit `cb3fa9d` "fix(relation-graph): 4 项交互性修复 (Gemini 9122a8b22405cdbe)" (2026-07-18)
+  - Item 1 方向感知曲率 (isReversed 翻转 curvature 符号) — 治反向边重叠
+  - step 0.25 → 0.3 (Gemini 上限 0.35)
+  - Item 2 中键 pan 自接管
+  - Item 3 工具条垂直堆叠
+  - Item 4 字号双轨 (nodeFontSize + linkFontSize)
+  - handoff 现有专门条目: `## Session 2026-07-18: 4 项问题一次性修复`
+
+### C. character.supplement 模板重复 — 待核实 (本次仅解释含义)
+- **症状**: UI「提示词库」页面看到两条同名 `character.supplement`，都是系统内置五角星图标
+- **代码层面只有 1 个 system prompt 定义**: `src/lib/ai/prompt-seeds.ts:290 moduleKey: 'character.supplement'`
+- **运行时重复最可能的来源**: 某个早期版本或迁移把 system 模板克隆成 user 模板，但 UI 用 system 图标统一渲染，没区分 system/user
+- **待核实点**: promptTemplates 表里的 isSystem / isBuiltin 字段实际值，渲染层的 icon 取值逻辑
+

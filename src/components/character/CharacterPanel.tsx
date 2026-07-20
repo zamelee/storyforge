@@ -293,7 +293,7 @@ const { addRelation } = useCharacterRelationStore()
     if (!targetChar) return
     aiSupp.reset()
     setParsing(true)
-    const parsed = await parseCharacterOutput(text, aiConfig)
+    const parsed = await parseCharacterOutput(text, aiConfig, targetChar.name)  // B fix: 注入已知角色名,避免第二次 LLM 抽取 name 字段抽风
     const relOutput = parseRelationshipsFromText(text)
     setParsing(false)
         if (!parsed) { alert('解析 AI 输出失败，请重试'); return }

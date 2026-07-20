@@ -934,3 +934,46 @@ https://gemini.google.com/app/4fac77e442b01914 (同会话继续追问)
 - dev port 999 不重启 ✅
 - 不动全局 AGENTS.md
 - 备份：tmp/code-backups/RelationGraph.tsx.20260719_115427.bak
+
+---
+
+# StoryForge 关系图 checkbox 尺寸 1/6 改进 - 2026-07-20
+
+**项目**: D:/Documents/VibeCoding/storyforge | 分支: main
+**服务端口**: 999 | URL: http://localhost:999/storyforge/workspace/1
+
+## 目标
+按用户指示:checkbox 视觉尺寸应为角色标签宽度的 1/6(cardW / 6 动态算)
+
+## 3 项改动
+
+### 1. cbSize 按 cardW / 6 动态算
+- 之前固定 11px,字号变大时 checkbox 比例失衡
+- 现在 cbSize = Math.max(6, Math.round(cardW / 6)),cardW≈44 → cbSize=7
+- padding 同步从 3 缩到 2(保持视觉比例)
+
+### 2. hit test 用 1.8x 放大响应区
+- 视觉 checkbox 缩到 7px,鼠标点不准
+- 新增 calcCheckboxHitRect 函数,中心不变,边长放大到 cbSize * 1.8 ≈ 12.6px
+- 用户点 checkbox 附近 12.6px 范围内都能命中
+
+### 3. 勾的描边粗细按 cbSize 比例缩
+- 之前固定 lineWidth = 1.8,适配 11px 视觉
+- 现在 lw = Math.max(1, cbSize * 0.17),7px→1.2 / 11px→1.87
+- 三角偏移也按比例(/b/c/d 5 个常数替换 cbSize 乘子)
+- 避免小 checkbox 上的勾糊掉
+
+## 关键代码位置
+- src/components/relations/RelationGraph.tsx:82-92 calcCheckboxRect (cbSize 动态)
+- src/components/relations/RelationGraph.tsx:96-106 calcCheckboxHitRect (放大版 hit)
+- src/components/relations/RelationGraph.tsx:509 handleNodeClick 用 hit rect
+- src/components/relations/RelationGraph.tsx:699-712 drawNode 勾描边按比例缩
+
+## 验证
+- TS 检查未跑(node 环境暂不可用,待恢复后跑)
+- dev port 999 未重启,HMR 自动应用
+- 需用户在浏览器手动验证视觉
+
+## 约束遵守
+- dev port 999 不重启
+- 备份: tmp/code-backups/RelationGraph.tsx.20260720_153337.bak

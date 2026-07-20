@@ -77,15 +77,31 @@ function getInitial(name: string): string {
 // 复选框矩形计算：drawNode 渲染与 onNodeClick hit test 共用。
 // Gemini 方案 F：右上角固定锚点（cbX = 卡片右 - cbSize - padding, cbY = 卡片上 + padding），
 // 与 avatarR/cardW 临界值解耦，物理引擎调整位置时不会跳。
+// 尺寸按 cardW / 6 动态算（用户最新指示：角色标签宽度的六分之一），
+// hit test 用 1.8x 放大响应区，弥补小 checkbox 点不准。
 function calcCheckboxRect(node: PositionedNode) {
   const cardW = node.cardW ?? 35  // drawNode 尚未跑过时的兜底
   const cardH = node.cardH ?? 50
-  const cbSize = 11
-  const padding = 3
+  const cbSize = Math.max(6, Math.round(cardW / 6))  // 角色标签宽度的六分之一（动态）
+  const padding = 2
   return {
     cbX: node.x + cardW / 2 - cbSize - padding,
     cbY: node.y - cardH / 2 + padding,
     cbSize,
+  }
+}
+
+// hit test 用放大版响应区（视觉 cbSize 1.8x），弥补小 checkbox 点不准。
+// 返回的是图形坐标中的矩形，与 screen2GraphCoords 反推的鼠标坐标对比。
+function calcCheckboxHitRect(node: PositionedNode) {
+  const { cbX, cbY, cbSize } = calcCheckboxRect(node)
+  const hitSize = cbSize * 1.8
+  const cx = cbX + cbSize / 2
+  const cy = cbY + cbSize / 2
+  return {
+    cbX: cx - hitSize / 2,
+    cbY: cy - hitSize / 2,
+    cbSize: hitSize,
   }
 }
 interface Props { width?: number; height?: number }
@@ -490,7 +506,8 @@ interface Props { width?: number; height?: number }
       } | null | undefined
       const coords = fg?.screen2GraphCoords?.(event.clientX, event.clientY)
       if (!coords) return
-      const { cbX, cbY, cbSize } = calcCheckboxRect(n)
+      // hit test 用放大版响应区（视觉 cbSize 1.8x），点不准依然能命中
+      const { cbX, cbY, cbSize } = calcCheckboxHitRect(n)
       if (coords.x < cbX || coords.x > cbX + cbSize || coords.y < cbY || coords.y > cbY + cbSize) {
         // 命中节点 body（不是 checkbox）→ 沉默，不响应，让 force-graph 走 drag 逻辑
         return
@@ -679,14 +696,19 @@ interface Props { width?: number; height?: number }
       ctx.stroke()
       // 勾
       if (checked) {
+        const lw = Math.max(1, cbSize * 0.17)        // 7→1.2, 11→1.87
+        const a = cbSize * 0.22                      // 7→1.54, 11→2.42
+        const b = cbSize * 0.46                      // 7→3.22, 11→5.06
+        const c = cbSize * 0.3                       // 7→2.1, 11→3.3
+        const d = cbSize * 0.42                      // 7→2.94, 11→4.62
         ctx.strokeStyle = '#1f2937'
-        ctx.lineWidth = 1.8
+        ctx.lineWidth = lw
         ctx.lineCap = 'round'
         ctx.lineJoin = 'round'
         ctx.beginPath()
-        ctx.moveTo(cbX + 2.5, cbY + cbSize / 2)
-        ctx.lineTo(cbX + cbSize / 2 - 0.5, cbY + cbSize - 3)
-        ctx.lineTo(cbX + cbSize - 2, cbY + 2.5)
+        ctx.moveTo(cbX + a, cbY + cbSize / 2)
+        ctx.lineTo(cbX + cbSize / 2 - 0.5, cbY + cbSize - c)
+        ctx.lineTo(cbX + cbSize - d, cbY + b)
         ctx.stroke()
       }
     }

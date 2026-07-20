@@ -501,10 +501,22 @@ interface Props { width?: number; height?: number }
       // multi 模式：只有命中 checkbox 区域才 toggle；命中节点 body 一律 return
       // —— 避免 React re-render 打断 d3-drag 的 dragstart 流程（用户反馈"再点击拖动被取消"）
       if (!event) return
+      // 注意：graphRef.current 上 **没有** scene 属性（react-force-graph 公开 ref
+      // 只暴露方法：screen2GraphCoords/graph2ScreenCoords/zoom/centerAt…）。
+      // 之前用 fg.scene.canvas 直接拿到 undefined，handleNodeClick 永远 early-return，
+      // checkbox 永远点不动。canvas 从 document 上拿即可（页面只有一个 canvas）。
       const fg = graphRef.current as unknown as {
         screen2GraphCoords?: (x: number, y: number) => { x: number; y: number } | undefined
       } | null | undefined
-      const coords = fg?.screen2GraphCoords?.(event.clientX, event.clientY)
+      const canvas = document.querySelector('canvas') as HTMLCanvasElement | null
+      if (!canvas) return
+      // 关键：screen2GraphCoords 内部用 zoomTransform(state.canvas)，其 .x/.y 是 canvas 局部
+      // 坐标系的偏移，所以传入的 x/y 必须是 canvas 内局部坐标（clientX − canvasRect.left），
+      // 而不是视口 clientX。否则 hit test 会偏掉 ~rect.left / .top，checkbox 点不动。
+      const rect = canvas.getBoundingClientRect()
+      const cx = event.clientX - rect.left
+      const cy = event.clientY - rect.top
+      const coords = fg?.screen2GraphCoords?.(cx, cy)
       if (!coords) return
       // hit test 用放大版响应区（视觉 cbSize 1.8x），点不准依然能命中
       const { cbX, cbY, cbSize } = calcCheckboxHitRect(n)
@@ -756,14 +768,23 @@ interface Props { width?: number; height?: number }
       ctx.fillText(`${count}条关系`, cx, y + padY + avatarR * 2 + fontSize + subFontSize * 2)
     }
   }, [characters, relCountMap, nodeFontSize, isNodeSelected, selectMode])
-  // 增大节点点击/拖拽响应区：用一个隐形大圆覆盖视觉卡片，避免边缘拖不到
+  // 增大节点点击/拖拽响应区：用 **与视觉卡片完全一致的矩形** 作为命中区（不能是圆心大圆，
+  // 否则右上内侧的 checkbox 会落在圆外，force-graph 直接判 background click，根本不会
+  // 进 onNodeClick —— 这是 checkbox 永远点不动的根因之一，Gemini 已确认）。
+  // drawNode 会先于本回调执行并写入 node.cardW/cardH，所以这里读到的尺寸已是最新。
   const nodePointerAreaPaint = useCallback((rawNode: unknown, color: string, ctx: CanvasRenderingContext2D) => {
     const node = rawNode as PositionedNode
-    const r = Math.max(30, nodeFontSize * 3.8)
+    const cardW = node.cardW ?? 70
+    const cardH = node.cardH ?? 100
+    // 额外向外扩 6px，避免边缘像素点不到；与 checkbox 1.8x hit 放大错开不冲突
+    const pad = 6
     ctx.fillStyle = color
-    ctx.beginPath()
-    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
-    ctx.fill()
+    ctx.fillRect(
+      node.x - cardW / 2 - pad,
+      node.y - cardH / 2 - pad,
+      cardW + pad * 2,
+      cardH + pad * 2,
+    )
   }, [linkFontSize])
   const drawLink = useCallback((rawLink: unknown, ctx: CanvasRenderingContext2D, _globalScale: number) => {
     const link = rawLink as PositionedLink

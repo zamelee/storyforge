@@ -1350,3 +1350,58 @@ yuanbw 最近的相关提交是 ee68677 fix(relations): sync extracted relations
 - 动手前 → 读 **10 工程化预期**（人天 / 风险 / 回归点 / 回滚预案）
 - 借鉴细节 → 读 **03 schema 对比** + **04 bibisco 时序** + **05 open-canvas 状态机**
 - 收尾验收 → 对照 **10 表格的「回归测试点」列** + **08 Gantt 的 v2.0 交付点**
+
+
+### 8. 架构图：现状 vs v2.0
+
+> 输出目录：`docs/assets/v2-roadmap/`
+> 阅读建议：A/B 并列打开，先看 A 的痛点红框，再看 B 哪里打了 NEW/MOD/FIX 标签
+
+#### 图 A · 现状架构（痛点红框）
+`A-current-architecture.svg`
+
+5 条核心链路：
+1. **启动加载**（绿）：`WorkspacePage.onMount → useCharacterStore.loadAll() → db.characters.where("projectId").equals(id).toArray()`
+2. **灵感反推 / AI 设计**（红）：`InspirationPage → buildInspirationReversePrompt() → LLM → parseReverseOutput → handleAcceptExtracted() → addRelation`
+   - ⚠ 痛点：`handleAcceptExtracted` 只判断 `selectedExtracted`，不判断 `isDuplicate`，重复关系被入库
+3. **关系图渲染**（红）：`RelationGraph 订阅 → relations.map → processLinks (curvature) → ForceGraph2D`
+   - ⚠ 痛点：`processLinks` 只做 curvature 排版，**不去重**；同 (from, to, type) 多条记录 fan-out 后视觉叠在一起 = 「钢丝球」
+4. **AI Prompt Context 装配**（黄）：`CONTEXT_SOURCES → source.read → capBySourceBudget → trimToFit`
+   - ⚠ 痛点：CONTEXT_SOURCES 里没有 `existing_relations` / `existing_characters` source → LLM 看不到已有数据 → 重复率高
+5. **数据存储**（绿/红）：IndexedDB / Dexie 共 29 张表，`characterRelations` 是唯一标红的（钢丝球根因）
+
+#### 图 B · v2.0 修改后架构（8 项改动标记）
+`B-v2-architecture.svg`
+
+图例：
+- 🟢 NEW 新增
+- 🟡 MOD 改造
+- 🔵 KEEP 保留（无破坏）
+- 🔴 FIX 修复
+
+改动统计（架构图右下角）：
+- **NEW 3 项**：`useInspirationHistory`（history[] + currentIndex）/ `useRelationDedup`（bibisco 模式）/ `inspirationHistory`（localStorage 5MB）
+- **MOD 4 项**：`useCharacterRelStore`（+upsert）/ `CharacterRelationPanel`（+Cards Drawer）/ `RelationGraph`（+isDirectedType 映射）/ `promptTemplates`（+extend 注册）
+- **FIX 1 项**：`handleAcceptExtracted` 加 `&& !isDuplicate` 守卫 + characterRelations 表 upsert
+- **KEEP 6 项**：所有其他组件/store/表不变（store 订阅者接口零破坏）
+- **合计 5.5 人天**（P0 = 1.5 + P1 = 4.0）
+
+#### 对比要点（看图时重点）
+
+| 维度 | 现状（A） | v2.0（B） |
+|------|----------|----------|
+| 关系入库 | `addRelation` 直接 .add → 重复入库 | upsert + isDuplicate 守卫 |
+| 关系渲染 | processLinks curvature 排版 | + 入口 dedup + isDirectedType 映射 |
+| 灵感反推 | 一锅端，无后悔药 | history[] + currentIndex + 扩展 |
+| Prompt context | 只有 worldview/storyCore | + existing_relations + existing_characters |
+| 仓库类型 | 纯 IndexedDB | IndexedDB + localStorage（仅 history） |
+| LLM 调用 | 直连浏览器 | 不变（仍是浏览器 → LLM API） |
+
+#### 链路映射（看图时跟踪）
+
+| 链路 | 现状痛点 | v2.0 修复点 |
+|------|----------|------------|
+| 1. 启动加载 | ✓ 健康 | + useInspirationHistory.init() 拉 history |
+| 2. 灵感反推 | ❌ isDuplicate 入库 | ✅ FIX 守卫 + NEW history + NEW extend |
+| 3. 关系图 | ❌ processLinks 不 dedup | ✅ NEW dedup util + MOD isDirectedType |
+| 4. Prompt context | ❌ 没有 existing source | ✅ MOD context-sources 注册 2 个新 source |

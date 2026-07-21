@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 660" width="1320" height="660"><style>
+      text { font-family: 'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace; fill: #334155; }
+    .bg { fill: #ffffff; }
+    .title { font-size: 18px; font-weight: 700; fill: #0f172a; }
+    .subtitle { font-size: 11px; font-weight: 400; fill: #475569; }
+    .h2 { font-size: 12px; font-weight: 600; fill: #1e293b; }
+    .label { font-size: 10px; font-weight: 500; fill: #1e293b; }
+    .small { font-size: 9px; font-weight: 400; fill: #475569; }
+    .tiny { font-size: 8px; font-weight: 400; fill: #64748b; }
+  </style><rect class="bg" width="1320" height="660"/>
+    <text class="title" x="40" y="36">schema 对比：我们的 CharacterRelation vs relation-graph 的 line</text>
+    <text class="subtitle" x="40" y="56">relation-graph 真实 schema 来自 https://raw.githubusercontent.com/relation-graph/relation-graph/main/README.md</text>
+
+    <!-- ours -->
+    <g transform="translate(40, 100)">
+      <rect width="540" height="400" rx="8" fill="rgba(136,19,55,0.2)" stroke="#fb7185" stroke-width="1.5"/>
+      <text class="h2" x="20" y="28" fill="#fb7185">❌ 我们的 CharacterRelation</text>
+      <text class="small" x="20" y="50" fill="#475569">src/lib/types/character-relation.ts</text>
+      <g transform="translate(20, 70)">
+        
+          <g transform="translate(0, 0)">
+            <text class="label" x="0" y="14" fill="#1e293b">id?: number</text>
+            <text class="small" x="380" y="14" fill="#64748b">primary key</text>
+          </g>
+        
+          <g transform="translate(0, 30)">
+            <text class="label" x="0" y="14" fill="#1e293b">projectId: number</text>
+            <text class="small" x="380" y="14" fill="#64748b">项目</text>
+          </g>
+        
+          <g transform="translate(0, 60)">
+            <text class="label" x="0" y="14" fill="#1e293b">fromCharacterId: number</text>
+            <text class="small" x="380" y="14" fill="#64748b">源</text>
+          </g>
+        
+          <g transform="translate(0, 90)">
+            <text class="label" x="0" y="14" fill="#1e293b">toCharacterId: number</text>
+            <text class="small" x="380" y="14" fill="#64748b">目标</text>
+          </g>
+        
+          <g transform="translate(0, 120)">
+            <text class="label" x="0" y="14" fill="#1e293b">relationType: RelationType</text>
+            <text class="small" x="380" y="14" fill="#64748b">10 种枚举</text>
+          </g>
+        
+          <g transform="translate(0, 150)">
+            <text class="label" x="0" y="14" fill="#1e293b">label: string</text>
+            <text class="small" x="380" y="14" fill="#64748b">关系标签</text>
+          </g>
+        
+          <g transform="translate(0, 180)">
+            <text class="label" x="0" y="14" fill="#1e293b">description: string</text>
+            <text class="small" x="380" y="14" fill="#64748b">详细描述</text>
+          </g>
+        
+          <g transform="translate(0, 210)">
+            <text class="label" x="0" y="14" fill="#1e293b">isBidirectional: boolean</text>
+            <text class="small" x="380" y="14" fill="#64748b">⚠️ 布尔标志位 — 根因之一</text>
+          </g>
+        
+          <g transform="translate(0, 240)">
+            <text class="label" x="0" y="14" fill="#1e293b">createdAt: number</text>
+            <text class="small" x="380" y="14" fill="#64748b">时间戳</text>
+          </g>
+        
+          <g transform="translate(0, 270)">
+            <text class="label" x="0" y="14" fill="#1e293b">updatedAt: number</text>
+            <text class="small" x="380" y="14" fill="#64748b">时间戳</text>
+          </g>
+        
+      </g>
+    </g>
+
+    <!-- arrow between -->
+    <g transform="translate(620, 280)">
+      <path d="M 0 20 L 60 20" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow)"/>
+      <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#fbbf24"/></marker></defs>
+      <text class="small" x="0" y="0" fill="#fbbf24">借鉴</text>
+    </g>
+
+    <!-- theirs -->
+    <g transform="translate(700, 100)">
+      <rect width="580" height="400" rx="8" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="1.5"/>
+      <text class="h2" x="20" y="28" fill="#34d399">✅ relation-graph 的 line schema</text>
+      <text class="small" x="20" y="50" fill="#475569">docs/data-line 真实定义</text>
+      <g transform="translate(20, 70)">
+        
+          <g transform="translate(0, 0)">
+            <text class="label" x="0" y="14" fill="#1e293b">id: string</text>
+            <text class="small" x="380" y="14" fill="#64748b">unique line id</text>
+          </g>
+        
+          <g transform="translate(0, 30)">
+            <text class="label" x="0" y="14" fill="#1e293b">from: string (required)</text>
+            <text class="small" x="380" y="14" fill="#64748b">源节点 — 必填</text>
+          </g>
+        
+          <g transform="translate(0, 60)">
+            <text class="label" x="0" y="14" fill="#1e293b">to: string (required)</text>
+            <text class="small" x="380" y="14" fill="#64748b">目标节点 — 必填</text>
+          </g>
+        
+          <g transform="translate(0, 90)">
+            <text class="label" x="0" y="14" fill="#1e293b">text: string</text>
+            <text class="small" x="380" y="14" fill="#64748b">line 标签</text>
+          </g>
+        
+          <g transform="translate(0, 120)">
+            <text class="label" x="0" y="14" fill="#1e293b">type: string</text>
+            <text class="small" x="380" y="14" fill="#64748b">业务类型 (slot 派发用)</text>
+          </g>
+        
+          <g transform="translate(0, 150)">
+            <text class="label" x="0" y="14" fill="#1e293b">data: Record&lt;string, any&gt;</text>
+            <text class="small" x="380" y="14" fill="#64748b">✅ 业务扩展字段塞这里</text>
+          </g>
+        
+          <g transform="translate(0, 180)">
+            <text class="label" x="0" y="14" fill="#1e293b">selected: boolean</text>
+            <text class="small" x="380" y="14" fill="#64748b">multi-select 状态</text>
+          </g>
+        
+          <g transform="translate(0, 210)">
+            <text class="label" x="0" y="14" fill="#1e293b">lineShape: RGLineShape</text>
+            <text class="small" x="380" y="14" fill="#64748b">1=Straight 2=Curve 4=Orthogonal</text>
+          </g>
+        
+          <g transform="translate(0, 240)">
+            <text class="label" x="0" y="14" fill="#1e293b">lineDirection: h | v</text>
+            <text class="small" x="380" y="14" fill="#64748b">主方向 (curve 计算用)</text>
+          </g>
+        
+          <g transform="translate(0, 270)">
+            <text class="label" x="0" y="14" fill="#1e293b">—</text>
+            <text class="small" x="380" y="14" fill="#64748b">❌ 没有 isBidirectional 字段</text>
+          </g>
+        
+      </g>
+    </g>
+
+    <!-- insight box -->
+    <g transform="translate(40, 520)">
+      <rect width="1240" height="100" rx="6" fill="rgba(120,53,15,0.2)" stroke="#fbbf24" stroke-width="1"/>
+      <text class="h2" x="20" y="24" fill="#fbbf24">核心洞察</text>
+      <text class="small" x="20" y="48">- relation-graph 根本不用 isBidirectional，所有边一律 directed</text>
+      <text class="small" x="20" y="64">- 箭头由 UI 层根据 type 决定（对称型不画箭头，有向型画箭头）</text>
+      <text class="small" x="20" y="80">- 业务字段全塞 data: Record&lt;string, any&gt; bucket，避免污染核心 schema</text>
+    </g>
+  </svg>

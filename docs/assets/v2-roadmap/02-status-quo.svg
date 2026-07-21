@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 480" width="1320" height="480"><style>
+      text { font-family: 'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace; fill: #334155; }
+    .bg { fill: #ffffff; }
+    .title { font-size: 18px; font-weight: 700; fill: #0f172a; }
+    .subtitle { font-size: 11px; font-weight: 400; fill: #475569; }
+    .h2 { font-size: 12px; font-weight: 600; fill: #1e293b; }
+    .label { font-size: 10px; font-weight: 500; fill: #1e293b; }
+    .small { font-size: 9px; font-weight: 400; fill: #475569; }
+    .tiny { font-size: 8px; font-weight: 400; fill: #64748b; }
+  </style><rect class="bg" width="1320" height="480"/>
+    <text class="title" x="40" y="36">关系网「钢丝球」现状 — IndexedDB 真实抓取</text>
+    <text class="subtitle" x="40" y="56">dev 999 · workspace 1 · project 1 · 8 角色 · 53 条 · 12 对重复</text>
+
+    <!-- characters -->
+    <g transform="translate(60, 130)">
+      <g transform="translate(0,0)">
+          <circle r="28" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text class="label" text-anchor="middle" y="-32">1</text>
+          <text class="label" text-anchor="middle" y="4">林知夏</text>
+        </g><g transform="translate(260,0)">
+          <circle r="28" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text class="label" text-anchor="middle" y="-32">2</text>
+          <text class="label" text-anchor="middle" y="4">沈见微</text>
+        </g><g transform="translate(520,80)">
+          <circle r="28" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text class="label" text-anchor="middle" y="-32">3</text>
+          <text class="label" text-anchor="middle" y="4">顾承曜</text>
+        </g><g transform="translate(780,0)">
+          <circle r="28" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text class="label" text-anchor="middle" y="-32">4</text>
+          <text class="label" text-anchor="middle" y="4">陆温言</text>
+        </g><g transform="translate(1040,80)">
+          <circle r="28" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text class="label" text-anchor="middle" y="-32">5</text>
+          <text class="label" text-anchor="middle" y="4">江临川</text>
+        </g><g transform="translate(130,160)">
+          <circle r="28" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text class="label" text-anchor="middle" y="-32">6</text>
+          <text class="label" text-anchor="middle" y="4">沈砚舟</text>
+        </g><g transform="translate(390,160)">
+          <circle r="28" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text class="label" text-anchor="middle" y="-32">7</text>
+          <text class="label" text-anchor="middle" y="4">陈小满</text>
+        </g><g transform="translate(910,160)">
+          <circle r="28" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1.5"/>
+          <text class="label" text-anchor="middle" y="-32">8</text>
+          <text class="label" text-anchor="middle" y="4">梁远舟</text>
+        </g>
+    </g>
+
+    <!-- duplicate pairs annotations -->
+    <g transform="translate(60, 130)">
+      <line x1="0" y1="0" x2="260" y2="0" stroke="#fb7185" stroke-width="3"/>
+      <text class="tiny" x="100" y="-12" fill="#fb7185">3 条 enemy (重复)</text>
+      <line x1="260" y1="0" x2="0" y2="0" stroke="#fbbf24" stroke-width="2" stroke-dasharray="4,4"/>
+      <text class="tiny" x="100" y="40" fill="#fbbf24">3 条 ally (重复)</text>
+      <line x1="130" y1="160" x2="260" y2="0" stroke="#a78bfa" stroke-width="2"/>
+      <text class="tiny" x="160" y="80" fill="#a78bfa">3 条 family</text>
+    </g>
+
+    <!-- legend -->
+    <g transform="translate(40, 380)">
+      <rect width="1240" height="60" rx="6" fill="rgba(30,41,59,0.5)" stroke="#475569" stroke-width="1"/>
+      <text class="h2" x="20" y="24">根因 6 层（每一层都是 bug，单修一层不够）</text>
+      <text class="small" x="20" y="44">①数据模型层（RelationType 当无向）②store 写入层（addRelation 裸 add）③AI 提取层（isDuplicate 仅 UI 提示）</text>
+      <text class="small" x="20" y="56">④AI prompt 层（同 pair 不去重）⑤展示层（processLinks 只分 curvature 不去重）⑥工具缺失（无合并/去重入口）</text>
+    </g>
+
+    <!-- annotation right -->
+    <g transform="translate(880, 130)">
+      <rect width="380" height="220" rx="6" fill="rgba(136,19,55,0.2)" stroke="#fb7185" stroke-width="1"/>
+      <text class="h2" x="20" y="24" fill="#fb7185">「钢丝球」指什么？</text>
+      <text class="small" x="20" y="50">- 同一对角色、同一 type</text>
+      <text class="small" x="20" y="66">  却存了 3 条记录</text>
+      <text class="small" x="20" y="86">- AI 在不同批次提取时</text>
+      <text class="small" x="20" y="102">  给出了不同 label / description</text>
+      <text class="small" x="20" y="124">- force-graph-2d 渲染时</text>
+      <text class="small" x="20" y="140">  每条记录都画线 = 多条线重叠</text>
+      <text class="small" x="20" y="160">- 同向多条 + 反向多条交叉</text>
+      <text class="small" x="20" y="176">  → 视觉上像一团钢丝球</text>
+      <text class="small" x="20" y="200" fill="#fbbf24">例: 林知夏↔顾承曜::enemy</text>
+      <text class="tiny" x="20" y="214">  id3「控制与反抗」+ id35「资源控制者」+ id41「安排与觉醒」</text>
+    </g>
+  </svg>

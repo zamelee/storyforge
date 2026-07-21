@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 560" width="1320" height="560">
+  <style>
+      text { font-family: 'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', 'Monaco', 'Courier New', monospace; fill: #334155; }
+    .bg { fill: #ffffff; }
+    .title { font-size: 18px; font-weight: 700; fill: #0f172a; }
+    .subtitle { font-size: 11px; font-weight: 400; fill: #475569; }
+    .h2 { font-size: 12px; font-weight: 600; fill: #1e293b; }
+    .label { font-size: 10px; font-weight: 500; fill: #1e293b; }
+    .small { font-size: 9px; font-weight: 400; fill: #475569; }
+    .tiny { font-size: 8px; font-weight: 400; fill: #64748b; }
+    .accent { fill: #fbbf24; }
+    .primary { fill: #22d3ee; }
+    .emerald { fill: #34d399; }
+    .violet { fill: #a78bfa; }
+    .rose { fill: #fb7185; }
+    .blue { fill: #60a5fa; }
+    .slate { fill: #475569; }
+  </style>
+  <rect class="bg" width="1320" height="560"/>
+  
+    <text class="title" x="40" y="36">术语对照表：专业 → 通俗</text>
+    <text class="subtitle" x="40" y="56">8 个核心术语，先看这一段</text>
+    <line x1="40" y1="68" x2="1280" y2="68" stroke="#1e293b" stroke-width="1"/>
+    <g transform="translate(40, 84)">
+      
+        <g transform="translate(0, 0)">
+          <rect x="0" y="0" width="180" height="44" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text class="label" x="14" y="20">directed edge</text>
+          <text class="tiny" x="14" y="36">有向边</text>
+          <text class="small" x="200" y="20">有箭头 A→B</text>
+          <text class="small" x="540" y="20" fill="#fbbf24">「A 单方面喜欢 B」</text>
+        </g>
+      
+        <g transform="translate(0, 56)">
+          <rect x="0" y="0" width="180" height="44" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text class="label" x="14" y="20">symmetric edge</text>
+          <text class="tiny" x="14" y="36">对称边</text>
+          <text class="small" x="200" y="20">无箭头 A—B</text>
+          <text class="small" x="540" y="20" fill="#fbbf24">「A 和 B 是朋友」</text>
+        </g>
+      
+        <g transform="translate(0, 112)">
+          <rect x="0" y="0" width="180" height="44" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text class="label" x="14" y="20">schema</text>
+          <text class="tiny" x="14" y="36">数据模型</text>
+          <text class="small" x="200" y="20">数据库表的字段定义</text>
+          <text class="small" x="540" y="20" fill="#fbbf24">「一张档案卡的格式」</text>
+        </g>
+      
+        <g transform="translate(0, 168)">
+          <rect x="0" y="0" width="180" height="44" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text class="label" x="14" y="20">migration</text>
+          <text class="tiny" x="14" y="36">迁移</text>
+          <text class="small" x="200" y="20">老数据按新规则整理</text>
+          <text class="small" x="540" y="20" fill="#fbbf24">「搬家时把老物件按新房间归位」</text>
+        </g>
+      
+        <g transform="translate(0, 224)">
+          <rect x="0" y="0" width="180" height="44" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text class="label" x="14" y="20">atomic rebuild</text>
+          <text class="tiny" x="14" y="36">原子重建</text>
+          <text class="small" x="200" y="20">清空 collection + 重 insert</text>
+          <text class="small" x="540" y="20" fill="#fbbf24">「把抽屉清空，按新规则重新整理」</text>
+        </g>
+      
+        <g transform="translate(0, 280)">
+          <rect x="0" y="0" width="180" height="44" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text class="label" x="14" y="20">currentIndex</text>
+          <text class="tiny" x="14" y="36">当前索引</text>
+          <text class="small" x="200" y="20">当前所在版本号</text>
+          <text class="small" x="540" y="20" fill="#fbbf24">「PPT 第几页 / 浏览器历史第几条」</text>
+        </g>
+      
+        <g transform="translate(0, 336)">
+          <rect x="0" y="0" width="180" height="44" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text class="label" x="14" y="20">State Injection</text>
+          <text class="tiny" x="14" y="36">状态注入</text>
+          <text class="small" x="200" y="20">把已有内容塞进 prompt</text>
+          <text class="small" x="540" y="20" fill="#fbbf24">「把已写的前文给 AI，让它接着写」</text>
+        </g>
+      
+        <g transform="translate(0, 392)">
+          <rect x="0" y="0" width="180" height="44" rx="6" fill="rgba(8,51,68,0.4)" stroke="#22d3ee" stroke-width="1"/>
+          <text class="label" x="14" y="20">Cards Drawer</text>
+          <text class="tiny" x="14" y="36">分步确认抽屉</text>
+          <text class="small" x="200" y="20">AI 输出进抽屉，勾选后才落库</text>
+          <text class="small" x="540" y="20" fill="#fbbf24">「超市自助结账：扫货进篮子，确认后刷卡」</text>
+        </g>
+      
+    </g>
+  
+</svg>

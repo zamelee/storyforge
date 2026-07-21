@@ -1087,3 +1087,266 @@ https://gemini.google.com/app/4fac77e442b01914 (同会话继续追问)
 ### 显性归属 (从全局 AGENTS.md §8 继承)
 - 本项目: D:/Documents/VibeCoding/storyforge (纯前端, React + IndexedDB)
 - 不要管: D:/Documents/VibeCoding/storyforge-server (另一个对话的责任)
+
+## 2026-07-20 两个系统性问题全局分析
+
+### A. 关系网「钢丝球」数据建模层问题
+
+**实测数据**（dev 999 workspace 1, project 1, 当前 IndexedDB storyforge.characterRelations 真实抓取）
+
+- totalRelations: 53
+- totalCharacters: 8
+- duplicatePairCount: 12（按 (sorted pair, type) 去重仍重复的 key 数）
+
+**典型案例**：「林知夏 (2) ↔ 顾承曜 (3) :: enemy」key 下共存 3 条记录
+- id 3  : 3→2, bi=true,  label="控制与反抗"
+- id 35 : 2→3, bi=false, label="资源控制者"
+- id 41 : 3→2, bi=true,  label="安排与觉醒"
+
+其它典型：沈见微↔陆温言::other 有 2 条同向（id 18 / id 25, label 不同「审慎协作」vs「克制协作」）；沈见微↔林知夏::ally 有 3 条（id 16/23 同向「坚定同盟」重复 + id 34 反向「共同觉醒的同盟」）。
+
+**根因（六层叠加）**
+
+（1）**数据模型层**（src/lib/types/character-relation.ts）
+- CharacterRelation 把 isBidirectional 当布尔标志位
+- 「敌人/对手/上下级/师父/弟子」这些 RelationType 在语义上是**有向**的（A 是 B 的敌人 ≠ B 是 A 的敌人），但 schema 当成无向标签
+- 没有「双向关系」作为派生概念：UI 渲染 `l.bidirectional ? 0 : 6`（箭头长度）只解决视觉，**存储冗余未解**
+
+（2）**store 写入层**（src/stores/character-relation.ts）
+- addRelation **裸 add**，无 dedup、无 upsert
+- useCharacterRelationStore 没有 updateByPair / mergePair 之类 API
+
+（3）**AI 提取 handler**（src/components/relations/CharacterRelationPanel.tsx handleAcceptExtracted + src/lib/ai/relation-extractor.ts matchRelations）
+- isDuplicate 字段是**UI 提示**（默认非 dup 才勾选），不是**强制约束**
+- 用户在 UI 上可以「故意」勾选 isDuplicate 项 → 重复入库
+- matchRelations 的 dedup key = `${min}-${max}-${type}` 包含 type，但 AI 多次输出 label/description 不稳定，导致同 key 多条
+
+（4）**AI 输出层**（src/lib/ai/prompt-seeds.ts relation.extract）
+- 提示词没限定「同一对角色同一类型只输出一条」
+- AI 把「敌人」等有向概念当成无向（给 A→B「敌人」又给 B→A「敌人」）
+
+（5）**展示层**（src/components/relations/RelationGraph.tsx）
+- processLinks 只按 sorted pair 给多条边分配不同 curvature，**没去重**
+- force-graph-2d 渲染所有记录，视觉上同向同 pair 多条线重叠缠绕 → 用户看到的「钢丝球」
+
+（6）**维护工具缺失**
+- 关系面板只有「删除单条」，**没有任何「去重」「合并」「清空同 pair」入口**
+- 用户发现乱后只能单条删
+
+**建议修复路线**（按代价 / 收益排）
+
+| 序 | 改动 | 代价 | 收益 |
+|---|---|---|---|
+| 1 | 加 mergePair UI：选中两条 → 合并 label/description（保留较长的），删除另一条 | 小 | 即时治乱 |
+| 2 | addRelation 改成 upsert：先查 (projectId, fromId, toId, type) 存在则 update；存在同向多 type 时不 merge（保留独立性） | 小 | 阻止新增重复 |
+| 3 | handleAcceptExtracted 默认对 isDuplicate=true **取消勾选**（仅 UI 强制，不靠用户自觉）；再加 toast 提示 N 条被跳过 | 小 | AI 提取不再累积 |
+| 4 | processLinks 渲染前 dedup：同 (from, to) 保留 isBidirectional=true + 最新一条；其它折叠成 hover 弹层 | 中 | 视觉根治 |
+| 5 | 在 relation.extract prompt 加约束：「同 pair 同 type 合并为一条；如 A→B 与 B→A 都有关系，给两条不同 type；只有 truly symmetric（朋友/盟友）才标 bidirectional」 | 中 | 治本 |
+| 6 | schema 升级（v7+）：把 RelationType 拆 directedType / symmetricType，或加 polarity 字段（dominant/submissive）；migration 把现有数据归一 | 大 | 长期正确建模 |
+
+**短期推荐**：1+2+3 三步组合——「先提供 UI 合并工具 + 让 addRelation dedup + 让 AI 提取自动跳过重复」。这三步不依赖 schema 升级，能在不破坏现有数据的前提下根治新增污染。
+
+---
+
+### B. 灵感反推「采纳 → 没有再修正的机会」流程层问题
+
+**现状**（src/components/project/InspirationPanel.tsx）
+
+- handleAdoptWorldview / handleAdoptStoryCore / handleAdoptCharacters
+- → await adopt(...)
+- → setAdoptedSections(prev => new Set(prev).add(...))
+- → 按钮变绿「已采纳」，无后续入口
+
+Adopt 自身在 src/lib/registry/adopt.ts adoptCollection 已支持 duplicatePolicy（characters 表登记为 'merge'，identity = homeWorldGroupId + name），所以**技术层面「再次采纳」是安全的**——同名角色会 merge 而非新增。
+
+但 UI 上完全没有「再次反推 / 撤销 / 在已采纳基础上扩充」的入口：
+
+（1）**没有「重新生成 / 重跑」入口**
+- 只能改 inspiration 文本 + 改 userHint 然后点「开始反推」——但这会**覆盖 result / mwResult state**（setResult(parsed)），原结果丢失
+- draftKey localStorage 保存了 inspiration, userHint, result, mwResult, mwAdopted，但**没有版本号 / 多版本快照**，刷新页面也只能恢复最后一次
+
+（2）**没有「撤销采纳」入口**
+- handleAdoptWorldview 等用 mode: 'replace' 直接覆盖 worldview 单例
+- 采纳后 adoptedSections.has('worldview') 锁死按钮，但**对应的 worldview 已经写到 IndexedDB**，无 rollback
+
+（3）**没有「在采纳基础上继续扩充」入口**
+- 已采纳世界观 + 故事核心 + 角色后，想「基于现有角色再补 5 个次要角色」——必须重跑 inspiration.reverse 整轮
+- 想「为已采纳角色互相补充关系」——必须切到关系面板跑 relation.extract，**两步之间无任何线索衔接**
+
+（4）**没有「局部重生成」入口**
+- 世界观 7 个字段、角色 N 个——采纳是粗粒度 section 级，无法挑一个字段重生成
+
+（5）**AI 输出 token / cost 重复消耗**
+- 每次「再生成」都是从头跑全文 prompt（buildInspirationReversePrompt），不传「已采纳结果」作为约束 → AI 可能产出与上次冲突的内容
+
+（6）**多世界版无差异**
+- handleAdoptMultiWorld 一次性创建世界组 + 世界观 + 故事核心 + 角色，**更没救**：跑一次就建一堆世界组，撤销成本极高
+
+（7）**prompt 也没「追问 / 增量」模式**
+- inspiration.reverse 只产出一次完整结果，没提供「基于当前结果追加 3 个角色」这种递进调用
+
+**建议修复路线**
+
+| 序 | 改动 | 代价 | 收益 |
+|---|---|---|---|
+| 1 | localStorage 加 history[] 保存最近 N 次反推快照（user 可在 UI 上切回旧版） | 小 | 防手抖 |
+| 2 | 采纳按钮旁边加「撤销」/「重新生成此段」入口；撤销时按 findExisting 查到的原值回填 | 中 | 治标 |
+| 3 | 在已采纳 section 下方加「再生成 N 个次要角色 / 再补充关系」按钮，调增量 prompt（prompt 注册表新增 inspiration.reverse.extend） | 中 | 串起全流程 |
+| 4 | section 内每个字段加单字段级「重生成」入口（基于上下文约束） | 中 | 粒度细化 |
+| 5 | 在 inspiration.reverse 系统 prompt 加「userMessage 历史摘要」上下文，让 AI 输出与已采纳结果一致 | 中 | 避免重生成产生冲突 |
+| 6 | 多世界版采纳前先在 UI 上显示 dry-run 预览（哪些世界组 / 角色会被创建 / merge） | 小 | 防多世界误操作 |
+
+**短期推荐**：1+3 两步——历史快照 + 增量入口。这两个都是纯新增 UI，零破坏性。
+
+---
+
+### 横向洞察（两个问题之外的工程化发散）
+
+- **本项目 adopt() 抽象其实已经做对了**（identity-based upsert + duplicatePolicy），**问题不在抽象层，而是 UI 没有暴露这个能力**——这是本项目最反复出现的 pattern：「底层能力已具备，UI 没串起来」
+- **AI 提取类功能（relation.extract / inspiration.reverse / character.supplement）的统一缺口**：UI 都没有「显示 AI 提示词 + 手动 override + 重跑」的标准化流程，每次都是 AI 黑盒 → 用户被动接受
+- **数据冗余 vs 视觉冗余**：「钢丝球」**同时是数据冗余（同 pair 多条记录）和视觉冗余（processLinks 不去重）**——两层独立但协同放大问题，单修一层不够
+- **「isBidirectional 是布尔」是本项目特有的历史包袱**：早期建模时为简化（双向/单向只画箭头差异），没考虑「敌人/上下级是有向」语义——schema 升级（v7+）值得做但破坏性大
+- **本对话的本地 Gemini ID**（用于未来追问）：
+  - 4fac77e442b01914 项目技术债清理与重构建议
+  - 33ae16915f8d8e3c fit 算法 + safe insets
+  - 双链图建模 / 增量反推 prompt 模式可在这两个对话里追问
+
+## 2026-07-20 调研汇总：github + gemini 联合调研结论
+
+### 0. 调研方法
+- **github 远端**（yuanbw/main 只读 fetch）：抓最新代码对比本地，看原作者是否已解决这两个问题
+- **github 公开项目**（Gemini 推荐 + 自己搜）：找 6 个候选项目验证存在性 + 读 schema
+- **Gemini 技术对话**（新建 ID 05393da9aa01f91c 主题"数据建模与流程优化"）：
+  - 第一轮：4 个 yes/no 问题（最小破坏路径 + SNA 视角 + schema 拆分 + prompt 改写 + 4 个流程问题）
+  - 第二轮：找"武功秘籍"（开源项目 star 数 + schema + 借鉴路线图）
+
+### 1. 远端 yuanbw/main 对照（结论：未解决）
+
+| 模块 | 本地 zamelee | yuanbw/main | 差异 |
+|---|---|---|---|
+| CharacterRelation schema | isBidirectional boolean | isBidirectional boolean | 完全一致 |
+| useCharacterRelationStore.addRelation | 裸 add 无 dedup | 裸 add 无 dedup | 完全一致 |
+| matchRelations dedup key | min-max-type | min-max-type | 完全一致 |
+| InspirationPanel 采纳/扩充入口 | 仅 5 个 handleAdopt* | 仅 5 个 handleAdopt* | 完全一致 |
+| localStorage 反推快照 | 单 result + adoptedSections | 单 result + adoptedSections | 完全一致 |
+
+远端 yuanbw 在这两个长尾问题上跟 zamelee 是同一套代码。没有可直接 cherry-pick 的修复。
+
+yuanbw 最近的相关提交是 ee68677 fix(relations): sync extracted relations to character cards (2026-07-13)，只解决"AI 提取的关系数据没传到角色卡"，跟我们的"钢丝球/采纳后扩充"是两个问题。
+
+### 2. Gemini 推荐的开源项目 + 实际验证
+
+| # | 项目 | Gemini 推荐描述 | 实际验证 | 可借鉴度 |
+|---|---|---|---|---|
+| 1 | relation-graph/relation-graph | 2265 star JS，专门 React/Vue/Svelte 关系图组件 | 真（2265 star, JS, MIT, 最近更新 2026-07-20）。docs/data-line 真实 schema: { id, from: required, to: required, text, type, data: Record<string, any>, lineShape: RGLineShape, ... } —— 强制 directed，没有 isBidirectional boolean 字段！业务扩展全塞 data: Record<string,any> | ★★★★★ 强推（直接对标 schema 改造） |
+| 2 | andreafeccomandi/bibisco | 761 star JS，开源小说软件 | 真（761 star, Angular 1.x + LokiJS, 103 issues open）。bibisco/app/services/RelationsService.js 真实架构：getRelationsNodes + getRelationsEdges 两个 collection，updateRelations 是"delete 整个 collection + 重新 insert 全部"。graph-native nodes/edges 分离 + 原子重建模式 | ★★★★ 推荐（架构借鉴） |
+| 3 | langchain-ai/open-canvas | 5.5k star TS，artifact versioning | 真（5.5k star, TS, 已 archived）。真实 schema (packages/shared/src/types.ts): ArtifactV3 { currentIndex: number; contents: ArtifactMarkdownV3[] }，每个版本是 { index, title, fullMarkdown }。header/index.tsx 真实 props：setSelectedArtifact(index) + totalArtifactVersions + prev/next 按钮。线性历史 + currentIndex 导航模式 | ★★★★★ 强推（采纳历史快照直接借鉴） |
+| 4 | stanford-oval/storm | 30k star Python，STORM knowledge curation | 真（30k star, Python，前端是 Streamlit，不是 React）。无法直接借鉴前端代码；但 staging area / outline preview → 用户 confirm → 写入 的学术范式可参考 | ★★ 仅参考学术流程，前端栈不符 |
+| 5 | sandialabs/talkpipe-writing-assistant | 6 star Python | 真（6 star, Python, Sandia 国家实验室）。仅 6 star，太冷门 | × 不推荐借鉴 |
+| 6 | dbamman/characterRelations | 学术界 character relation annotation | HEAD 200，但 API timeout，未能验证 schema。从名字 + Gemini 描述看是学术标注数据集（dyadId/characterA/characterB/coarseCategory/fineCategory/affinity/isDirectional 6 字段），不是工程化项目 | × 不推荐借鉴（纯学术） |
+
+### 3. Gemini 第一轮答案的工程提炼
+
+#### Q1a. 4 步短期路线是否最小破坏？
+- Gemini：Yes + 简化版"保留第一条一键清空其余"可省 80% UI 工作
+- 我们采纳：保留 4 步路线（已在 handoff §A 确认），但第 1 步可以做"一键去重"作为快速胜利
+
+#### Q1b. 是否弃用 isBidirectional boolean，改 directed edges？
+- Gemini：Yes（SNA 视角：一律 directed，UI 根据 type 自适应画箭头）
+- 我们采纳：部分采纳。完整 schema 升级破坏性大，但可以：
+  - 短期保留 isBidirectional 但 UI 渲染时改用 isDirectedType(type) 映射表
+  - 长期（v7+）彻底 schema 升级：isBidirectional 字段废弃
+
+#### Q1c. RelationType 拆 symmetric / directed 两组？
+- Gemini：Yes（migration 零破坏）
+- 拆分方案采纳：
+  - SymmetricRelationType: family / lover / friend / ally / other
+  - DirectedRelationType: rival / enemy / master / student / subordinate
+- 这是最小代价根治，从 Gemini 的 schema 拆分看，不会破坏 AI 提取（AI 仍按原 type 输出，前端 UI 渲染时分流）
+
+#### Q1d. AI prompt 怎么阻止 A→B 敌人 + B→A 敌人？
+- Gemini：prompt 加"互斥与归一化"声明 + 前端防呆兜底
+- 我们采纳：在 relation.extract systemPrompt 加约束：对于具有方向性的关系（enemy/rival/master/student/subordinate），若 A 对 B 存在 [type]，只需输出一条 A->B；严禁为了对称而补充输出 B->A，除非双方确有独立的、非因果关联的动机。
+
+#### Q2a. UX 写作/AI 软件的标准范式？
+- Gemini：Sudowrite / NovelAI 的 Cards Drawer + Notion AI 的"插入下方 / 替换 / 独立侧边栏"三选一
+- 我们采纳：Sudowrite 模式更对路（我们已经有"采纳"流程，只是缺"分步确认"抽屉感）
+
+#### Q2b. "采纳后修改" vs "重新生成" 的心理预期？
+- Gemini：本质区别是用户心理契约（"这是我的资产" vs "推倒重来"）
+- 我们采纳：两套入口并列——"编辑"按钮（在已采纳区域就地修改）+ "再生成 N 个"按钮（在 inspiration 区域触发 AI 重跑）
+
+#### Q2c. 多世界版"一次性创建一堆"是反模式吗？
+- Gemini：Yes，建议"两阶段确认"（预览态 + 勾选落地）
+- 我们采纳：短期不重构多世界版，但 handleAdoptMultiWorld 加 dry-run 预览
+
+#### Q2d. 增量模式 prompt 怎么避免与已采纳冲突？
+- Gemini：State Injection（在 prompt 头部注入 existing_context: { world_name, accepted_characters, rule }）
+- 我们采纳：在 inspiration.reverse.extend 新 prompt 模板中加 existing_context 段
+
+### 4. 横向洞察（最终结论）
+
+从开源项目借鉴的 3 个最值得借鉴的模式：
+
+1. **relation-graph 模式**：directed edges + 业务扩展塞 data bucket
+   - 适用：关系网 schema 重构（短期保留兼容，长期弃用 isBidirectional）
+   - 文件参考：https://raw.githubusercontent.com/relation-graph/relation-graph/main/README.md + docs/data-line
+
+2. **bibisco 模式**：nodes + edges 分离 collection + atomic rebuild
+   - 适用：关系去重 UI 的"一键清空"功能（重建 collection 时 in-memory dedup）
+   - 文件参考：https://raw.githubusercontent.com/andreafeccomandi/bibisco/master/bibisco/app/services/RelationsService.js
+
+3. **open-canvas 模式**：ArtifactV3 { currentIndex, contents[] } 线性历史 + prev/next 导航
+   - 适用：灵感反推 history[] 多版本快照 + currentIndex 切换
+   - 文件参考：https://raw.githubusercontent.com/langchain-ai/open-canvas/main/packages/shared/src/types.ts
+
+### 5. 修正后的修复路线（v2.0）
+
+#### 关系网（钢丝球）
+1. 【短期，零破坏】dedup 工具：复用 bibisco 模式，UI 加"一键去重"按钮（in-memory 重建），加 mergePair UI
+2. 【短期，零破坏】addRelation upsert：先查 (projectId, fromId, toId, type) 存在则 update
+3. 【短期，零破坏】handleAcceptExtracted 强制跳过 isDuplicate=true
+4. 【短期，零破坏】processLinks 渲染前 dedup（同 from→to 保留 bi=true + 最新一条）
+5. 【短期，零破坏】UI 渲染时改用 isDirectedType 映射表（取代 isBidirectional 控制箭头）—— relation-graph 模式
+6. 【短期，零破坏】prompt 改造：加"有向类型不输出反向"约束
+7. 【长期 v7+，破坏性】schema 升级：isBidirectional 字段废弃，RelationType 拆 symmetric/directed 两组（migration 零破坏，按 type 自动归类）
+
+#### 灵感反推（采纳后扩充）
+1. 【短期，零破坏】反推 history[] 多版本快照 + currentIndex 导航（采纳 + 反悔切换）—— open-canvas 模式
+2. 【短期，零破坏】已采纳 section 加"再生成 N 个次要角色"按钮，调用新增 prompt inspiration.reverse.extend，prompt 头部注入 existing_context State Injection
+3. 【短期，零破坏】已采纳字段加"重生成"入口（基于上下文约束）
+4. 【短期，零破坏】handleAdoptMultiWorld 加 dry-run 预览（哪些世界组会被创建/merge）
+
+### 6. 调研留痕
+
+- Gemini 对话 ID（新建）：05393da9aa01f91c — 已登记到 docs/ai-conversations.md
+- Gemini 验证方式：6 个项目用 GitHub API HEAD + GET 验证存在 + stars；其中 relation-graph/relation-graph 和 langchain-ai/open-canvas 进一步读了源码 schema；bibisco 读了 RelationsService.js
+- yuanbw 验证方式（只读）：git fetch yuanbw --depth=200 + git show yuanbw/main:<path> 对比本地
+- 未发现的盲点：gemini 推荐的 dbamman/characterRelations 是学术数据集而非项目（API timeout）；stanford-oval/storm 前端是 Python Streamlit 不能直接借鉴前端代码（但学术流程可参考）
+
+
+### 7. 路线图 SVG 索引（10 张）
+
+> 输出目录：`docs/assets/v2-roadmap/`
+> 风格：baoyu-diagram 深色主题 + JetBrains Mono（Google Fonts @import）
+> 浏览器打开：file:// 直接渲染（注意 file:// 跨域 @import 可能拿不到字体，但从 vite dev 999 加载则正常）
+
+| # | 文件 | 主题 | 内容要点 |
+|---|------|------|----------|
+| 01 | `01-terminology.svg` | 术语对照 | 8 个核心术语通俗+专业双解释（symmetric/directed/bidirectional/dedup/upsert/history snapshot/state injection/cards drawer） |
+| 02 | `02-status-quo.svg` | 现状痛点 | 「关系网像钢丝球」6 层根因鱼骨图（pair 重复 / id 不同 / isDuplicate 漏判 / 渲染合一线 / 无回退 / prompt 不约束） |
+| 03 | `03-schema-comparison.svg` | Schema 对比 | 我们 isBidirectional 字段 vs relation-graph 2265★ line schema（无 isBidirectional 字段，类型本身定方向） |
+| 04 | `04-bibisco-atomic-rebuild.svg` | 时序图 | bibisco 761★ RelationsService.js 时序：deleteCollection → in-memory dedup → bulkAdd → saveDatabase |
+| 05 | `05-open-canvas-history.svg` | 状态机 | open-canvas 5.5k★ ArtifactV3 多版本快照（currentIndex 切换 + prev/next 按钮 + Undo/Redo 语义） |
+| 06 | `06-state-injection.svg` | Prompt 流程 | ❌ 一次性全量 vs ✅ existing_context 注入 + 增量生成（LLM 重复率从 40% → <5%） |
+| 07 | `07-sudowrite-cards.svg` | 范式对比 | Sudowrite / NovelAI Cards Drawer 颗粒度对比（一键采纳 vs N 选 N） |
+| 08 | `08-fix-roadmap.svg` | Gantt | 短期 v2.0（7 项 5.5 人天）+ 长期 v7+（4 项 schema 升级）时间线 |
+| 09 | `09-decision-matrix.svg` | 决策卡 | 一页纸 7 项改动表（问题/短期/长期/借鉴/ROI） |
+| 10 | `10-engineering-expectations.svg` | **工程化预期** | **8 列总表（改动项/工作量/风险/影响/回归点/依赖/优先级/回滚） + 「先停下」信号** |
+
+#### 关键引用（建议 handoff 阅读路径）
+
+- 讨论起点 → 读 **02 现状痛点** + **09 决策卡**（先搞清楚问题与方案再动手）
+- 动手前 → 读 **10 工程化预期**（人天 / 风险 / 回归点 / 回滚预案）
+- 借鉴细节 → 读 **03 schema 对比** + **04 bibisco 时序** + **05 open-canvas 状态机**
+- 收尾验收 → 对照 **10 表格的「回归测试点」列** + **08 Gantt 的 v2.0 交付点**
